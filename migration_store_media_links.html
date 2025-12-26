@@ -1,0 +1,332 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AIRCTT Store Media & Links Migration SQL</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+            min-height: 100vh;
+            padding: 40px 20px;
+            color: #fff;
+        }
+        .container {
+            max-width: 1000px;
+            margin: 0 auto;
+        }
+        h1 {
+            text-align: center;
+            margin-bottom: 10px;
+            font-size: 2rem;
+            background: linear-gradient(90deg, #00d4ff, #7c3aed);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+        .subtitle {
+            text-align: center;
+            color: #888;
+            margin-bottom: 30px;
+        }
+        .instructions {
+            background: rgba(124, 58, 237, 0.1);
+            border: 1px solid rgba(124, 58, 237, 0.3);
+            border-radius: 12px;
+            padding: 20px;
+            margin-bottom: 20px;
+        }
+        .instructions h2 {
+            color: #7c3aed;
+            margin-bottom: 10px;
+            font-size: 1.1rem;
+        }
+        .instructions ol {
+            margin-left: 20px;
+            color: #ccc;
+        }
+        .instructions li {
+            margin-bottom: 8px;
+        }
+        .sql-container {
+            background: #0d1117;
+            border-radius: 12px;
+            overflow: hidden;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.3);
+        }
+        .sql-header {
+            background: linear-gradient(90deg, #238636, #1f6feb);
+            padding: 15px 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .sql-header span {
+            font-weight: bold;
+        }
+        .copy-btn {
+            background: rgba(255,255,255,0.2);
+            border: none;
+            color: white;
+            padding: 8px 16px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 14px;
+            transition: all 0.2s;
+        }
+        .copy-btn:hover {
+            background: rgba(255,255,255,0.3);
+        }
+        .copy-btn.copied {
+            background: #238636;
+        }
+        .sql-content {
+            padding: 20px;
+            overflow-x: auto;
+            max-height: 600px;
+            overflow-y: auto;
+        }
+        pre {
+            font-family: 'Fira Code', 'Consolas', monospace;
+            font-size: 13px;
+            line-height: 1.6;
+            color: #c9d1d9;
+            white-space: pre;
+        }
+        .comment { color: #8b949e; }
+        .keyword { color: #ff7b72; }
+        .string { color: #a5d6ff; }
+        .function { color: #d2a8ff; }
+        .table { color: #7ee787; }
+
+        .tables-created {
+            margin-top: 30px;
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+        }
+        .table-card {
+            background: rgba(255,255,255,0.05);
+            border: 1px solid rgba(255,255,255,0.1);
+            border-radius: 10px;
+            padding: 15px;
+        }
+        .table-card h3 {
+            color: #7ee787;
+            font-size: 1rem;
+            margin-bottom: 8px;
+        }
+        .table-card p {
+            color: #888;
+            font-size: 0.85rem;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>AIRCTT Store Media & Links Migration</h1>
+        <p class="subtitle">매장 이미지/영상/링크 및 반경 설정 기능 추가</p>
+
+        <div class="instructions">
+            <h2>Supabase SQL Editor 실행 방법</h2>
+            <ol>
+                <li>Supabase 대시보드 접속</li>
+                <li>SQL Editor 메뉴 클릭</li>
+                <li>New Query 버튼 클릭</li>
+                <li>아래 SQL 전체를 복사하여 붙여넣기</li>
+                <li>Run 버튼 클릭</li>
+            </ol>
+        </div>
+
+        <div class="sql-container">
+            <div class="sql-header">
+                <span>20251224_store_media_links.sql</span>
+                <button class="copy-btn" onclick="copySQL()">Copy SQL</button>
+            </div>
+            <div class="sql-content">
+                <pre id="sql-code">-- =====================================================
+-- AIRCTT Store Media & Links Migration
+-- 매장 이미지/영상/링크 및 반경 설정 기능 추가
+-- =====================================================
+
+-- 1. stores 테이블에 새 컬럼 추가 (기존 유지 + 추가)
+ALTER TABLE stores ADD COLUMN IF NOT EXISTS radius_meters INTEGER DEFAULT 5000;
+ALTER TABLE stores ADD COLUMN IF NOT EXISTS hero_image_url TEXT;
+ALTER TABLE stores ADD COLUMN IF NOT EXISTS promo_video_url TEXT;
+ALTER TABLE stores ADD COLUMN IF NOT EXISTS order_url TEXT;
+ALTER TABLE stores ADD COLUMN IF NOT EXISTS reservation_url TEXT;
+
+-- 2. store_media 테이블 생성 (갤러리 이미지/영상)
+CREATE TABLE IF NOT EXISTS store_media (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    store_id UUID NOT NULL REFERENCES stores(id) ON DELETE CASCADE,
+    type TEXT NOT NULL CHECK (type IN ('image', 'video')),
+    url TEXT NOT NULL,
+    title TEXT,
+    sort_order INTEGER DEFAULT 0,
+    status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'hidden', 'deleted')),
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- 3. store_links 테이블 생성 (외부 링크)
+CREATE TABLE IF NOT EXISTS store_links (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    store_id UUID NOT NULL REFERENCES stores(id) ON DELETE CASCADE,
+    label TEXT NOT NULL,
+    url TEXT NOT NULL,
+    icon TEXT,
+    sort_order INTEGER DEFAULT 0,
+    status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'hidden', 'deleted')),
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- 4. admin_audit_logs 테이블 생성 (관리자 변경 기록)
+CREATE TABLE IF NOT EXISTS admin_audit_logs (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    admin_user_id UUID,
+    action TEXT NOT NULL,
+    target_type TEXT NOT NULL,
+    target_id UUID,
+    old_value JSONB,
+    new_value JSONB,
+    ip_address TEXT,
+    user_agent TEXT,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- 5. 인덱스 생성
+CREATE INDEX IF NOT EXISTS idx_store_media_store_id ON store_media(store_id);
+CREATE INDEX IF NOT EXISTS idx_store_media_status ON store_media(status);
+CREATE INDEX IF NOT EXISTS idx_store_links_store_id ON store_links(store_id);
+CREATE INDEX IF NOT EXISTS idx_store_links_status ON store_links(status);
+CREATE INDEX IF NOT EXISTS idx_admin_audit_logs_target ON admin_audit_logs(target_type, target_id);
+CREATE INDEX IF NOT EXISTS idx_admin_audit_logs_created ON admin_audit_logs(created_at);
+CREATE INDEX IF NOT EXISTS idx_stores_radius ON stores(radius_meters);
+CREATE INDEX IF NOT EXISTS idx_stores_location ON stores(lat, lng);
+
+-- 6. RLS 정책 설정
+
+-- store_media RLS
+ALTER TABLE store_media ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "store_media_select" ON store_media;
+CREATE POLICY "store_media_select" ON store_media
+    FOR SELECT USING (status = 'active' OR status = 'hidden');
+
+DROP POLICY IF EXISTS "store_media_insert" ON store_media;
+CREATE POLICY "store_media_insert" ON store_media
+    FOR INSERT WITH CHECK (true);
+
+DROP POLICY IF EXISTS "store_media_update" ON store_media;
+CREATE POLICY "store_media_update" ON store_media
+    FOR UPDATE USING (true);
+
+DROP POLICY IF EXISTS "store_media_delete" ON store_media;
+CREATE POLICY "store_media_delete" ON store_media
+    FOR DELETE USING (true);
+
+-- store_links RLS
+ALTER TABLE store_links ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "store_links_select" ON store_links;
+CREATE POLICY "store_links_select" ON store_links
+    FOR SELECT USING (status = 'active' OR status = 'hidden');
+
+DROP POLICY IF EXISTS "store_links_insert" ON store_links;
+CREATE POLICY "store_links_insert" ON store_links
+    FOR INSERT WITH CHECK (true);
+
+DROP POLICY IF EXISTS "store_links_update" ON store_links;
+CREATE POLICY "store_links_update" ON store_links
+    FOR UPDATE USING (true);
+
+DROP POLICY IF EXISTS "store_links_delete" ON store_links;
+CREATE POLICY "store_links_delete" ON store_links
+    FOR DELETE USING (true);
+
+-- admin_audit_logs RLS
+ALTER TABLE admin_audit_logs ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "admin_audit_logs_select" ON admin_audit_logs;
+CREATE POLICY "admin_audit_logs_select" ON admin_audit_logs
+    FOR SELECT USING (true);
+
+DROP POLICY IF EXISTS "admin_audit_logs_insert" ON admin_audit_logs;
+CREATE POLICY "admin_audit_logs_insert" ON admin_audit_logs
+    FOR INSERT WITH CHECK (true);
+
+-- 7. updated_at 자동 갱신 트리거
+CREATE OR REPLACE FUNCTION update_updated_at_column()
+RETURNS TRIGGER AS $$
+BEGIN
+    NEW.updated_at = NOW();
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+DROP TRIGGER IF EXISTS update_store_media_updated_at ON store_media;
+CREATE TRIGGER update_store_media_updated_at
+    BEFORE UPDATE ON store_media
+    FOR EACH ROW
+    EXECUTE FUNCTION update_updated_at_column();
+
+DROP TRIGGER IF EXISTS update_store_links_updated_at ON store_links;
+CREATE TRIGGER update_store_links_updated_at
+    BEFORE UPDATE ON store_links
+    FOR EACH ROW
+    EXECUTE FUNCTION update_updated_at_column();
+
+COMMENT ON TABLE store_media IS '매장 갤러리 미디어 (이미지/영상)';
+COMMENT ON TABLE store_links IS '매장 외부 링크 (홈페이지, 구매, 예약 등)';
+COMMENT ON TABLE admin_audit_logs IS '관리자 변경 이력 로그';
+COMMENT ON COLUMN stores.radius_meters IS '매장 노출 반경 (0~20,000,000 미터)';
+COMMENT ON COLUMN stores.hero_image_url IS '매장 대표 이미지 URL';
+COMMENT ON COLUMN stores.promo_video_url IS '홍보 영상 URL (유튜브 등)';
+COMMENT ON COLUMN stores.order_url IS '구매 페이지 외부 링크';
+COMMENT ON COLUMN stores.reservation_url IS '예약 페이지 외부 링크';</pre>
+            </div>
+        </div>
+
+        <div class="tables-created">
+            <div class="table-card">
+                <h3>stores (수정)</h3>
+                <p>radius_meters, hero_image_url, promo_video_url, order_url, reservation_url 컬럼 추가</p>
+            </div>
+            <div class="table-card">
+                <h3>store_media (신규)</h3>
+                <p>매장 갤러리 이미지/영상 저장</p>
+            </div>
+            <div class="table-card">
+                <h3>store_links (신규)</h3>
+                <p>외부 링크 (홈페이지, 구매, 예약)</p>
+            </div>
+            <div class="table-card">
+                <h3>admin_audit_logs (신규)</h3>
+                <p>관리자 변경 이력 추적</p>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        function copySQL() {
+            const sqlCode = document.getElementById('sql-code').textContent;
+            navigator.clipboard.writeText(sqlCode).then(() => {
+                const btn = document.querySelector('.copy-btn');
+                btn.textContent = 'Copied!';
+                btn.classList.add('copied');
+                setTimeout(() => {
+                    btn.textContent = 'Copy SQL';
+                    btn.classList.remove('copied');
+                }, 2000);
+            });
+        }
+    </script>
+</body>
+</html>
