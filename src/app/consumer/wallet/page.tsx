@@ -2,7 +2,7 @@
 'use client';
 
 import { useEffect, useState, useMemo } from 'react';
-import { Coins, Ticket, CreditCard, MapPin, Navigation, Filter, Search, Trash2 } from 'lucide-react';
+import { Coins, Ticket, CreditCard, MapPin, Navigation, Filter, Search, Trash2, Gift, Share2, ExternalLink } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Input } from '@/components/ui/input';
@@ -32,6 +32,8 @@ export default function WalletPage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [filterStatus, setFilterStatus] = useState<'all' | 'available' | 'used' | 'expired'>('all');
   const [sortByDistance, setSortByDistance] = useState(true);
+  const [giftingCouponId, setGiftingCouponId] = useState<string | null>(null);
+  const [giftUrl, setGiftUrl] = useState<string | null>(null);
 
   // 실제 기기 위치 연동
   const {
@@ -150,6 +152,66 @@ export default function WalletPage() {
   const handleDelete = (id: string) => {
     if (confirm(language === 'ko' ? '정말 이 쿠폰을 삭제하시겠습니까?' : 'Delete this coupon?')) {
       setCoupons(prev => prev.filter(c => c.id !== id));
+    }
+  };
+
+  // 선물하기 핸들러
+  const handleGift = async (couponId: string) => {
+    setGiftingCouponId(couponId);
+    setGiftUrl(null);
+    try {
+      const senderId = getSenderId();
+      const res = await fetch('/api/coupons/gift', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          coupon_issue_id: couponId,
+          sender_id: senderId,
+        }),
+      });
+      const data = await res.json();
+      if (data.success && data.gift_url) {
+        setGiftUrl(data.gift_url);
+      } else {
+        alert(data.error || '선물 링크 생성에 실패했습니다.');
+        setGiftingCouponId(null);
+      }
+    } catch {
+      alert('서버 연결에 실패했습니다.');
+      setGiftingCouponId(null);
+    }
+  };
+
+  // 선물 링크 공유
+  const handleShareGift = async () => {
+    if (!giftUrl) return;
+    try {
+      if (navigator.share) {
+        await navigator.share({
+          title: 'AIRCTT 쿠폰 선물',
+          text: '쿠폰을 선물합니다! 아래 링크를 눌러 받아보세요.',
+          url: giftUrl,
+        });
+      } else {
+        await navigator.clipboard.writeText(giftUrl);
+        alert(language === 'ko' ? '링크가 복사되었습니다!' : 'Link copied!');
+      }
+    } catch {
+      await navigator.clipboard.writeText(giftUrl);
+      alert(language === 'ko' ? '링크가 복사되었습니다!' : 'Link copied!');
+    }
+    setGiftingCouponId(null);
+    setGiftUrl(null);
+  };
+
+  // 매장으로 이동 (딥링크)
+  const handleGoToStore = (storeName?: string, storeLocation?: { lat: number; lng: number }) => {
+    if (storeLocation) {
+      const url = `https://www.google.com/maps/dir/?api=1&destination=${storeLocation.lat},${storeLocation.lng}`;
+      window.open(url, '_blank');
+    } else if (storeName) {
+      const url = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(storeName)}`;
+      window.open(url, '_blank');
     }
   };
 
@@ -282,24 +344,84 @@ export default function WalletPage() {
           ) : (
             <div className="space-y-4 pb-20">
               {filteredCoupons.map((coupon) => (
-                <div key={coupon.id} className="relative group flex items-stretch gap-2">
-                  <div className="flex-1 min-w-0">
-                    <CouponCard
-                      coupon={coupon}
-                      distance={coupon.distance}
-                      storeName={coupon.store?.name}
-                    />
+                <div key={coupon.id} className="relative group">
+                  <div className="flex items-stretch gap-2">
+                    <div className="flex-1 min-w-0">
+                      <CouponCard
+                        coupon={coupon}
+                        distance={coupon.distance}
+                        storeName={coupon.store?.name}
+                      />
+                    </div>
+
+                    {/* 액션 버튼들 */}
+                    <div className="flex flex-col gap-1 flex-shrink-0">
+                      {/* 선물하기 버튼 */}
+                      {coupon.status === 'available' && (
+                        <Button
+                          variant="outline"
+                          className="h-auto w-14 flex-1 flex flex-col items-center justify-center rounded-xl border-purple-300 hover:bg-purple-50 text-purple-600"
+                          onClick={() => handleGift(coupon.id)}
+                          disabled={giftingCouponId === coupon.id}
+                        >
+                          <Gift className="h-4 w-4 mb-0.5" />
+                          <span className="text-[10px] font-bold">{language === 'ko' ? '선물' : 'Gift'}</span>
+                        </Button>
+                      )}
+
+                      {/* 매장 가기 버튼 */}
+                      {coupon.store && coupon.status === 'available' && (
+                        <Button
+                          variant="outline"
+                          className="h-auto w-14 flex-1 flex flex-col items-center justify-center rounded-xl border-blue-300 hover:bg-blue-50 text-blue-600"
+                          onClick={() => handleGoToStore(
+                            coupon.store?.name,
+                            coupon.store ? { lat: coupon.store.latitude, lng: coupon.store.longitude } : undefined
+                          )}
+                        >
+                          <ExternalLink className="h-4 w-4 mb-0.5" />
+                          <span className="text-[10px] font-bold">{language === 'ko' ? '매장' : 'Store'}</span>
+                        </Button>
+                      )}
+
+                      {/* 삭제 버튼 */}
+                      <Button
+                        variant="destructive"
+                        className="h-auto w-14 flex-1 flex flex-col items-center justify-center rounded-xl bg-red-500 hover:bg-red-600 shadow-sm"
+                        onClick={() => handleDelete(coupon.id)}
+                      >
+                        <Trash2 className="h-4 w-4 mb-0.5" />
+                        <span className="text-[10px] font-bold">{language === 'ko' ? '삭제' : 'Del'}</span>
+                      </Button>
+                    </div>
                   </div>
 
-                  {/* 삭제 버튼 - 쿠폰 옆에 위치 */}
-                  <Button
-                    variant="destructive"
-                    className="h-auto w-16 flex-shrink-0 flex flex-col items-center justify-center rounded-xl bg-red-500 hover:bg-red-600 shadow-sm"
-                    onClick={() => handleDelete(coupon.id)}
-                  >
-                    <Trash2 className="h-5 w-5 mb-1" />
-                    <span className="text-xs font-bold">{language === 'ko' ? '삭제' : 'Del'}</span>
-                  </Button>
+                  {/* 선물 링크 모달 */}
+                  {giftingCouponId === coupon.id && giftUrl && (
+                    <div className="mt-2 p-3 rounded-xl bg-purple-50 border border-purple-200 flex items-center gap-2">
+                      <div className="flex-1 min-w-0">
+                        <p className="text-xs font-bold text-purple-700 mb-1">
+                          {language === 'ko' ? '선물 링크가 생성되었습니다!' : 'Gift link created!'}
+                        </p>
+                        <p className="text-[10px] text-purple-500 truncate">{giftUrl}</p>
+                      </div>
+                      <Button
+                        size="sm"
+                        className="bg-purple-600 hover:bg-purple-700 text-white flex-shrink-0"
+                        onClick={handleShareGift}
+                      >
+                        <Share2 className="h-4 w-4 mr-1" />
+                        {language === 'ko' ? '공유' : 'Share'}
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={() => { setGiftingCouponId(null); setGiftUrl(null); }}
+                      >
+                        {language === 'ko' ? '닫기' : 'Close'}
+                      </Button>
+                    </div>
+                  )}
                 </div>
               ))}
             </div>
@@ -351,4 +473,16 @@ export default function WalletPage() {
       </Tabs>
     </div>
   );
+}
+
+function getSenderId(): string {
+  if (typeof window === 'undefined') return 'anonymous';
+  try {
+    const session = localStorage.getItem('airctt_consumer_session');
+    if (session) {
+      const parsed = JSON.parse(session);
+      return parsed.user_id || parsed.consumer_id || 'anonymous';
+    }
+  } catch { /* ignore */ }
+  return 'anonymous';
 }
