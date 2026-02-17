@@ -2,7 +2,7 @@
 'use client';
 
 import { useEffect, useState, useMemo } from 'react';
-import { Coins, Ticket, CreditCard, MapPin, Navigation, Filter, Search, Trash2, Gift, Share2, ExternalLink } from 'lucide-react';
+import { Coins, Ticket, CreditCard, MapPin, Navigation, Filter, Search, Trash2, Gift, Share2, ExternalLink, Copy, Check, Link2, MessageCircle } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Input } from '@/components/ui/input';
@@ -34,6 +34,7 @@ export default function WalletPage() {
   const [sortByDistance, setSortByDistance] = useState(true);
   const [giftingCouponId, setGiftingCouponId] = useState<string | null>(null);
   const [giftUrl, setGiftUrl] = useState<string | null>(null);
+  const [linkCopied, setLinkCopied] = useState(false);
 
   // 실제 기기 위치 연동
   const {
@@ -182,26 +183,67 @@ export default function WalletPage() {
     }
   };
 
-  // 선물 링크 공유
-  const handleShareGift = async () => {
+  // 링크 복사
+  const handleCopyLink = async () => {
+    if (!giftUrl) return;
+    try {
+      await navigator.clipboard.writeText(giftUrl);
+      setLinkCopied(true);
+      setTimeout(() => setLinkCopied(false), 2000);
+    } catch {
+      // 폴백: 텍스트 선택 방식
+      const textArea = document.createElement('textarea');
+      textArea.value = giftUrl;
+      document.body.appendChild(textArea);
+      textArea.select();
+      document.execCommand('copy');
+      document.body.removeChild(textArea);
+      setLinkCopied(true);
+      setTimeout(() => setLinkCopied(false), 2000);
+    }
+  };
+
+  // 카카오톡 / 메시지 공유 (딥링크)
+  const handleKakaoShare = () => {
+    if (!giftUrl) return;
+    const text = encodeURIComponent(`🎁 쿠폰을 선물합니다!\n아래 링크를 눌러 받아보세요.\n${giftUrl}`);
+    // 카카오톡 공유 (모바일 앱이 있으면 열림, 없으면 SMS 폴백)
+    if (/Android|iPhone|iPad/i.test(navigator.userAgent)) {
+      window.open(`kakaotalk://msg/text/${text}`, '_blank');
+      // 폴백: 0.5초 뒤에 안 열렸으면 SMS로
+      setTimeout(() => {
+        window.open(`sms:?body=${text}`, '_blank');
+      }, 500);
+    } else {
+      // 데스크톱: 클립보드 + 안내
+      handleCopyLink();
+    }
+  };
+
+  // 네이티브 공유 (SNS/앱)
+  const handleNativeShare = async () => {
     if (!giftUrl) return;
     try {
       if (navigator.share) {
         await navigator.share({
-          title: 'AIRCTT 쿠폰 선물',
+          title: 'AIRCTT 쿠폰 선물 🎁',
           text: '쿠폰을 선물합니다! 아래 링크를 눌러 받아보세요.',
           url: giftUrl,
         });
       } else {
-        await navigator.clipboard.writeText(giftUrl);
-        alert(language === 'ko' ? '링크가 복사되었습니다!' : 'Link copied!');
+        // 네이티브 공유 미지원 → 링크 복사 폴백
+        await handleCopyLink();
       }
     } catch {
-      await navigator.clipboard.writeText(giftUrl);
-      alert(language === 'ko' ? '링크가 복사되었습니다!' : 'Link copied!');
+      // 취소 또는 에러 → 무시
     }
+  };
+
+  // 선물 모달 닫기
+  const handleCloseGiftModal = () => {
     setGiftingCouponId(null);
     setGiftUrl(null);
+    setLinkCopied(false);
   };
 
   // 매장으로 이동 (딥링크)
@@ -360,12 +402,25 @@ export default function WalletPage() {
                       {coupon.status === 'available' && (
                         <Button
                           variant="outline"
-                          className="h-auto w-14 flex-1 flex flex-col items-center justify-center rounded-xl border-purple-300 hover:bg-purple-50 text-purple-600"
+                          className={`h-auto w-14 flex-1 flex flex-col items-center justify-center rounded-xl transition-all ${
+                            giftingCouponId === coupon.id && giftUrl
+                              ? 'border-purple-500 bg-purple-50 text-purple-700 dark:bg-purple-900/30'
+                              : 'border-purple-300 hover:bg-purple-50 text-purple-600'
+                          }`}
                           onClick={() => handleGift(coupon.id)}
-                          disabled={giftingCouponId === coupon.id}
+                          disabled={giftingCouponId === coupon.id && !giftUrl}
                         >
-                          <Gift className="h-4 w-4 mb-0.5" />
-                          <span className="text-[10px] font-bold">{language === 'ko' ? '선물' : 'Gift'}</span>
+                          {giftingCouponId === coupon.id && !giftUrl ? (
+                            <>
+                              <div className="h-4 w-4 mb-0.5 border-2 border-purple-400 border-t-transparent rounded-full animate-spin" />
+                              <span className="text-[10px] font-bold">{language === 'ko' ? '생성중' : '...'}</span>
+                            </>
+                          ) : (
+                            <>
+                              <Gift className="h-4 w-4 mb-0.5" />
+                              <span className="text-[10px] font-bold">{language === 'ko' ? '선물' : 'Gift'}</span>
+                            </>
+                          )}
                         </Button>
                       )}
 
@@ -396,27 +451,76 @@ export default function WalletPage() {
                     </div>
                   </div>
 
-                  {/* 선물 링크 모달 */}
+                  {/* 선물 링크 모달 (스타벅스형 3버튼) */}
                   {giftingCouponId === coupon.id && giftUrl && (
-                    <div className="mt-2 p-3 rounded-xl bg-purple-50 border border-purple-200 flex items-center gap-2">
-                      <div className="flex-1 min-w-0">
-                        <p className="text-xs font-bold text-purple-700 mb-1">
-                          {language === 'ko' ? '선물 링크가 생성되었습니다!' : 'Gift link created!'}
-                        </p>
-                        <p className="text-[10px] text-purple-500 truncate">{giftUrl}</p>
+                    <div className="mt-2 p-4 rounded-2xl bg-gradient-to-br from-purple-50 to-pink-50 dark:from-purple-900/20 dark:to-pink-900/20 border border-purple-200 dark:border-purple-700/50">
+                      {/* 상단 안내 */}
+                      <div className="flex items-center gap-2 mb-3">
+                        <div className="w-8 h-8 rounded-full bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center flex-shrink-0">
+                          <Gift className="h-4 w-4 text-white" />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-xs font-bold text-purple-700 dark:text-purple-300">
+                            {language === 'ko' ? '🎉 선물 링크가 생성되었습니다!' : '🎉 Gift link created!'}
+                          </p>
+                          <p className="text-[10px] text-purple-400 dark:text-purple-500 truncate">{giftUrl}</p>
+                        </div>
                       </div>
+
+                      {/* 공유 버튼 3종 (스타벅스형) */}
+                      <div className="grid grid-cols-3 gap-2 mb-3">
+                        {/* 링크 복사 */}
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className={`h-auto py-2 flex flex-col items-center gap-1 rounded-xl transition-all ${
+                            linkCopied
+                              ? 'bg-green-50 border-green-300 text-green-600 dark:bg-green-900/20 dark:border-green-700'
+                              : 'border-purple-200 text-purple-600 hover:bg-purple-50 dark:border-purple-700 dark:text-purple-400'
+                          }`}
+                          onClick={handleCopyLink}
+                        >
+                          {linkCopied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
+                          <span className="text-[10px] font-bold">
+                            {linkCopied
+                              ? (language === 'ko' ? '복사됨!' : 'Copied!')
+                              : (language === 'ko' ? '링크복사' : 'Copy')}
+                          </span>
+                        </Button>
+
+                        {/* 카카오톡 / 메시지 */}
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="h-auto py-2 flex flex-col items-center gap-1 rounded-xl border-yellow-300 text-yellow-700 hover:bg-yellow-50 dark:border-yellow-700 dark:text-yellow-400"
+                          onClick={handleKakaoShare}
+                        >
+                          <MessageCircle className="h-4 w-4" />
+                          <span className="text-[10px] font-bold">
+                            {language === 'ko' ? '메시지' : 'Message'}
+                          </span>
+                        </Button>
+
+                        {/* SNS 공유 */}
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="h-auto py-2 flex flex-col items-center gap-1 rounded-xl border-cyan-300 text-cyan-600 hover:bg-cyan-50 dark:border-cyan-700 dark:text-cyan-400"
+                          onClick={handleNativeShare}
+                        >
+                          <Share2 className="h-4 w-4" />
+                          <span className="text-[10px] font-bold">
+                            {language === 'ko' ? '공유하기' : 'Share'}
+                          </span>
+                        </Button>
+                      </div>
+
+                      {/* 닫기 */}
                       <Button
-                        size="sm"
-                        className="bg-purple-600 hover:bg-purple-700 text-white flex-shrink-0"
-                        onClick={handleShareGift}
-                      >
-                        <Share2 className="h-4 w-4 mr-1" />
-                        {language === 'ko' ? '공유' : 'Share'}
-                      </Button>
-                      <Button
-                        size="sm"
                         variant="ghost"
-                        onClick={() => { setGiftingCouponId(null); setGiftUrl(null); }}
+                        size="sm"
+                        className="w-full text-xs text-purple-400 hover:text-purple-600"
+                        onClick={handleCloseGiftModal}
                       >
                         {language === 'ko' ? '닫기' : 'Close'}
                       </Button>

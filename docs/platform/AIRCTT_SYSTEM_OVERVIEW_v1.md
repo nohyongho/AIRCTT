@@ -164,21 +164,24 @@ store_id, period(YYYY-MM), gross_amount, fee_amount, net_amount, status
 
 ## 8. 개발 우선순위
 
-### Phase 1 — 필수 작동 (현재)
-- [x] 위치 기반 쿠폰 조회 (nearby API)
-- [x] 게임 시스템 (점수/보상)
-- [x] 쿠폰 획득/사용 API
-- [x] 지갑 서비스
-- [ ] **발행 → 게임 자동 연결** (coupon_group_key + nearby 공용)
-- [ ] **1인1장 + 최고할인 정책**
-- [ ] **쿠폰 자동번호 생성** (확장 코드)
-- [ ] **승인 후에만 게임 노출**
+### Phase 1 — 필수 작동 (완료)
+- [x] 위치 기반 쿠폰 조회 (nearby API + Supabase RPC)
+- [x] 게임 시스템 (Canvas 2D + Web Audio 사운드 엔진)
+- [x] **게임 → DB 완전 연결** (nearby API 스폰 + acquire API 저장)
+- [x] **1인1장 + 최고할인 정책** (acquire_coupon_with_policy DB 함수)
+- [x] **coupon_group_key 자동 생성** (store_id:product_sku 트리거)
+- [x] 선물하기 (gift_token + /gift/{token} 수락 페이지)
+- [x] 지갑 서비스 (DB 기반 조회)
+- [x] 가맹점 쿠폰 발행 (구름장터 - 반경/위치/지도)
+- [x] **승인 후에만 게임/지도 노출** (approval_status 필터)
 
-### Phase 2 — 플랫폼화
-- [ ] 선물하기 (링크/수락)
+### Phase 2 — 플랫폼화 (진행중)
+- [ ] 지갑 → 상점 딥링크 연결
+- [ ] 상점 주문 플로우 (배달/픽업/예약)
+- [ ] 쿠폰 자동번호 생성 (확장 코드)
 - [ ] 크랙커 단가 계산 + 발행 비용 산정
 - [ ] 사용 로그(coupon_events) + 정산 리포트
-- [ ] 구름장터: 입점사 페이지 + 쿠폰 거래
+- [ ] 네온 테마 적용
 
 ### Phase 3 — 우주무대 확장
 - [ ] AR 이벤트 / 스마트글래스
