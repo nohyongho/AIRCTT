@@ -76,37 +76,53 @@ export default function MerchantHomePage() {
   const [uploadResult, setUploadResult] = useState<{ url: string; type: 'IMAGE' | 'VIDEO' } | null>(null);
   const [dragOver, setDragOver] = useState(false);
 
-  // 파일 업로드 핸들러
+  // 파일 업로드 핸들러 (Supabase Storage 직접 업로드)
   const handleFileUpload = useCallback(async (file: File) => {
     if (!selectedDetailCoupon) return;
     setUploading(true);
     setUploadResult(null);
     try {
-      const formData = new FormData();
-      formData.append('file', file);
-      formData.append('coupon_id', selectedDetailCoupon.id);
+      const isVideo = file.type.startsWith('video/');
+      const supabaseUrl = 'https://nlsiwrwiyozpiofrmzxa.supabase.co';
+      const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im5sc2l3cndpeW96cGlvZnJtenhhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjExNTc4NzcsImV4cCI6MjA3NjczMzg3N30.hurd7QNUJ-JVppETyDnCwU97F1Z3jkWszYRM9NhSUAg';
+      const ext = file.name.split('.').pop()?.toLowerCase() || (isVideo ? 'mp4' : 'jpg');
+      const ts = Date.now();
+      const rand = Math.random().toString(36).substring(2, 8);
+      const folder = isVideo ? 'videos' : 'images';
+      const filePath = `merchant/${folder}/${ts}_${rand}.${ext}`;
 
-      const res = await fetch('/api/merchant/upload', {
-        method: 'POST',
-        body: formData,
-      });
-      const data = await res.json();
+      const uploadRes = await fetch(
+        `${supabaseUrl}/storage/v1/object/coupon-media/${filePath}`,
+        {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${supabaseKey}`,
+            'apikey': supabaseKey,
+            'Content-Type': file.type,
+            'x-upsert': 'true',
+          },
+          body: file,
+        }
+      );
 
-      if (data.success) {
-        setUploadResult({ url: data.url, type: data.media_type });
-        // 로컬 쿠폰 데이터도 업데이트
+      if (uploadRes.ok) {
+        const publicUrl = `${supabaseUrl}/storage/v1/object/public/coupon-media/${filePath}`;
+        setUploadResult({ url: publicUrl, type: isVideo ? 'VIDEO' : 'IMAGE' });
         setSelectedDetailCoupon(prev => prev ? {
           ...prev,
-          imageUrl: data.url,
-          mediaType: data.media_type,
+          imageUrl: publicUrl,
+          mediaType: isVideo ? 'VIDEO' : 'IMAGE',
         } : null);
         setCoupons(prev => prev.map(c =>
           c.id === selectedDetailCoupon.id
-            ? { ...c, imageUrl: data.url, mediaType: data.media_type }
+            ? { ...c, imageUrl: publicUrl, mediaType: isVideo ? 'VIDEO' : 'IMAGE' }
             : c
         ));
+        console.log('✅ 업로드 성공:', publicUrl);
       } else {
-        alert(data.error || '업로드 실패');
+        const errText = await uploadRes.text();
+        console.error('Storage 업로드 실패:', errText);
+        alert('업로드 실패: 다시 시도해주세요.');
       }
     } catch (err) {
       console.error('Upload error:', err);
@@ -397,33 +413,59 @@ export default function MerchantHomePage() {
                         const input = document.createElement('input');
                         input.type = 'file';
                         input.accept = 'image/*,video/*,.mp4,.mov,.avi,.webm,.gif,.png,.jpg,.jpeg,.webp';
-                        input.onchange = (ev) => {
+                        input.onchange = async (ev) => {
                           const file = (ev.target as HTMLInputElement).files?.[0];
                           if (!file) return;
                           if (file.size > 100 * 1024 * 1024) {
                             alert('파일 크기가 100MB를 초과합니다.');
                             return;
                           }
-                          // 즉시 로컬 미리보기 (서버 불필요)
-                          const blobUrl = URL.createObjectURL(file);
                           const isVideo = file.type.startsWith('video/');
+
+                          // 즉시 로컬 미리보기
+                          const blobUrl = URL.createObjectURL(file);
                           setCoupons(prev => prev.map(c =>
                             c.id === coupon.id ? { ...c, imageUrl: blobUrl, mediaType: isVideo ? 'VIDEO' : 'IMAGE' } : c
                           ));
-                          // 백그라운드로 서버 업로드 시도 (실패해도 미리보기는 유지)
-                          const formData = new FormData();
-                          formData.append('file', file);
-                          formData.append('coupon_id', coupon.id);
-                          fetch('/api/merchant/upload', { method: 'POST', body: formData })
-                            .then(r => r.json())
-                            .then(data => {
-                              if (data.success && data.url && !data.url.startsWith('data:')) {
-                                setCoupons(prev => prev.map(c =>
-                                  c.id === coupon.id ? { ...c, imageUrl: data.url } : c
-                                ));
+
+                          // Supabase Storage에 직접 업로드 (Vercel 4.5MB 제한 우회)
+                          try {
+                            const supabaseUrl = 'https://nlsiwrwiyozpiofrmzxa.supabase.co';
+                            const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im5sc2l3cndpeW96cGlvZnJtenhhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjExNTc4NzcsImV4cCI6MjA3NjczMzg3N30.hurd7QNUJ-JVppETyDnCwU97F1Z3jkWszYRM9NhSUAg';
+                            const ext = file.name.split('.').pop()?.toLowerCase() || (isVideo ? 'mp4' : 'jpg');
+                            const ts = Date.now();
+                            const rand = Math.random().toString(36).substring(2, 8);
+                            const folder = isVideo ? 'videos' : 'images';
+                            const filePath = `merchant/${folder}/${ts}_${rand}.${ext}`;
+
+                            const uploadRes = await fetch(
+                              `${supabaseUrl}/storage/v1/object/coupon-media/${filePath}`,
+                              {
+                                method: 'POST',
+                                headers: {
+                                  'Authorization': `Bearer ${supabaseKey}`,
+                                  'apikey': supabaseKey,
+                                  'Content-Type': file.type,
+                                  'x-upsert': 'true',
+                                },
+                                body: file,
                               }
-                            })
-                            .catch(() => { /* 서버 실패해도 로컬 미리보기 유지 */ });
+                            );
+
+                            if (uploadRes.ok) {
+                              const publicUrl = `${supabaseUrl}/storage/v1/object/public/coupon-media/${filePath}`;
+                              // 로컬 상태를 영구 URL로 교체
+                              setCoupons(prev => prev.map(c =>
+                                c.id === coupon.id ? { ...c, imageUrl: publicUrl, mediaType: isVideo ? 'VIDEO' : 'IMAGE' } : c
+                              ));
+                              URL.revokeObjectURL(blobUrl);
+                              console.log('✅ Supabase Storage 업로드 성공:', publicUrl);
+                            } else {
+                              console.warn('⚠️ Storage 업로드 실패, 로컬 미리보기 유지:', await uploadRes.text());
+                            }
+                          } catch (err) {
+                            console.warn('⚠️ 업로드 오류, 로컬 미리보기 유지:', err);
+                          }
                         };
                         input.click();
                       }}
