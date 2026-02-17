@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { MapPin, Crosshair, Gamepad2, Sliders, X, Loader2, Gift, Share2, Wallet } from 'lucide-react';
+import { MapPin, Crosshair, Gamepad2, Sliders, X, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -11,71 +11,13 @@ import { toast } from 'sonner';
 
 interface CouponMarker {
   id: string;
-  coupon_id: string;
   name: string;
   storeName: string;
-  storeAddress: string;
   discount: string;
-  discountType: 'percent' | 'amount';
-  discountValue: number;
   lat: number;
   lng: number;
   radiusM: number;
   color: string;
-  distanceKm: number;
-  validUntil?: string;
-  description?: string;
-  couponGroupKey?: string;
-}
-
-// API 응답을 CouponMarker로 변환
-function apiToCouponMarker(item: any): CouponMarker {
-  const colors = ['#FF6B35', '#6C3CE1', '#E11D48', '#2563EB', '#EC4899', '#059669', '#D97706', '#7C3AED'];
-  const colorIndex = Math.abs(hashCode(item.coupon_id || item.store_id || '')) % colors.length;
-
-  const discount = item.discount_type === 'percent'
-    ? `${item.discount_value}%`
-    : `${Number(item.discount_value).toLocaleString()}`;
-
-  return {
-    id: item.coupon_id || item.id,
-    coupon_id: item.coupon_id || item.id,
-    name: item.title,
-    storeName: item.store_name,
-    storeAddress: item.store_address || '',
-    discount,
-    discountType: item.discount_type,
-    discountValue: item.discount_value,
-    lat: item.store_lat || item.lat || 37.5665,
-    lng: item.store_lng || item.lng || 126.978,
-    radiusM: (item.radius_km || item.distance_km || 1) * 1000,
-    color: colors[colorIndex],
-    distanceKm: item.distance_km || 0,
-    validUntil: item.valid_until,
-    description: item.description,
-    couponGroupKey: item.coupon_group_key,
-  };
-}
-
-function hashCode(s: string): number {
-  let hash = 0;
-  for (let i = 0; i < s.length; i++) {
-    const char = s.charCodeAt(i);
-    hash = ((hash << 5) - hash) + char;
-    hash |= 0;
-  }
-  return hash;
-}
-
-// 유저 ID (데모)
-function getUserId(): string {
-  if (typeof window === 'undefined') return 'demo_user';
-  let uid = localStorage.getItem('airctt_user_id');
-  if (!uid) {
-    uid = 'user_' + Math.random().toString(36).slice(2, 10) + '_' + Date.now().toString(36);
-    localStorage.setItem('airctt_user_id', uid);
-  }
-  return uid;
 }
 
 export default function CouponMapMain() {
@@ -83,17 +25,21 @@ export default function CouponMapMain() {
   const mapRef = useRef<HTMLDivElement>(null);
   const leafletMap = useRef<any>(null);
   const markersRef = useRef<any[]>([]);
-  const circlesRef = useRef<any[]>([]);
   const [L, setL] = useState<any>(null);
-  const [userLocation, setUserLocation] = useState({ lat: 37.5665, lng: 126.978 });
-  const [radiusFilter, setRadiusFilter] = useState(5000); // 5km
+  const [userLocation, setUserLocation] = useState({ lat: 37.5665, lng: 126.978 }); // 서울 기본
+  const [radiusFilter, setRadiusFilter] = useState(5000); // 5km 기본
   const [showFilterPanel, setShowFilterPanel] = useState(false);
   const [selectedCoupon, setSelectedCoupon] = useState<CouponMarker | null>(null);
   const [claiming, setClaiming] = useState(false);
-  const [gifting, setGifting] = useState(false);
-  const [coupons, setCoupons] = useState<CouponMarker[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [locationReady, setLocationReady] = useState(false);
+
+  // 데모 쿠폰 데이터
+  const [coupons] = useState<CouponMarker[]>([
+    { id: '1', name: '피자 30% 할인', storeName: '피자헛 강남점', discount: '30%', lat: 37.5665, lng: 126.978, radiusM: 1000, color: '#FF6B35' },
+    { id: '2', name: '커피 50% 할인', storeName: '스타벅스 역삼점', discount: '50%', lat: 37.5000, lng: 127.0363, radiusM: 2000, color: '#6C3CE1' },
+    { id: '3', name: '치킨 1+1', storeName: 'BBQ 선릉점', discount: '1+1', lat: 37.5048, lng: 127.0489, radiusM: 1500, color: '#E11D48' },
+    { id: '4', name: '영화 예매 40%', storeName: 'CGV 강남', discount: '40%', lat: 37.5013, lng: 127.0268, radiusM: 3000, color: '#2563EB' },
+    { id: '5', name: '디저트 무료', storeName: '설빙 삼성점', discount: 'FREE', lat: 37.5090, lng: 127.0636, radiusM: 800, color: '#EC4899' },
+  ]);
 
   // Leaflet 로드
   useEffect(() => {
@@ -113,55 +59,13 @@ export default function CouponMapMain() {
             lat: position.coords.latitude,
             lng: position.coords.longitude,
           });
-          setLocationReady(true);
         },
         () => {
           console.log('위치 권한 거부됨, 서울 기본값 사용');
-          setLocationReady(true);
         }
       );
-    } else {
-      setLocationReady(true);
     }
   }, []);
-
-  // 근처 쿠폰 API 호출
-  useEffect(() => {
-    if (!locationReady) return;
-    fetchCoupons();
-  }, [locationReady, radiusFilter]);
-
-  const fetchCoupons = async () => {
-    setLoading(true);
-    try {
-      const radiusKm = radiusFilter / 1000;
-      const res = await fetch(
-        `/api/coupons/nearby?lat=${userLocation.lat}&lng=${userLocation.lng}&radius=${radiusKm}&limit=30`
-      );
-      const result = await res.json();
-
-      if (result.success && result.data) {
-        const markers = result.data.map(apiToCouponMarker);
-        setCoupons(markers);
-
-        // 지도에 마커 다시 렌더링
-        if (leafletMap.current && L) {
-          renderMarkers(markers);
-        }
-      } else {
-        console.error('Nearby API error:', result.error);
-        // 데이터가 없으면 데모 데이터 사용
-        if (result.data?.length === 0) {
-          toast.info('주변에 등록된 쿠폰이 아직 없습니다');
-        }
-      }
-    } catch (err) {
-      console.error('Fetch coupons error:', err);
-      toast.error('쿠폰 조회 중 오류 발생');
-    } finally {
-      setLoading(false);
-    }
-  };
 
   // 지도 초기화
   useEffect(() => {
@@ -177,12 +81,12 @@ export default function CouponMapMain() {
 
     // 지도 생성
     const map = L.map(mapRef.current, {
-      zoomControl: false,
+      zoomControl: false, // 기본 줌 컨트롤 숨김
     }).setView([userLocation.lat, userLocation.lng], 13);
 
     // 타일 레이어
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-      attribution: '&copy; OpenStreetMap',
+      attribution: '© OpenStreetMap',
       maxZoom: 19,
     }).addTo(map);
 
@@ -192,29 +96,20 @@ export default function CouponMapMain() {
     leafletMap.current = map;
 
     // 마커 생성
-    renderMarkers(coupons);
+    renderMarkers();
 
     return () => {
       map.remove();
     };
   }, [L, userLocation]);
 
-  // 쿠폰 변경 시 마커 업데이트
-  useEffect(() => {
-    if (leafletMap.current && L && coupons.length > 0) {
-      renderMarkers(coupons);
-    }
-  }, [coupons]);
-
   // 마커 렌더링
-  const renderMarkers = (couponList: CouponMarker[]) => {
+  const renderMarkers = () => {
     if (!L || !leafletMap.current) return;
 
-    // 기존 마커 및 서클 제거
+    // 기존 마커 제거
     markersRef.current.forEach(m => m.remove());
     markersRef.current = [];
-    circlesRef.current.forEach(c => c.remove());
-    circlesRef.current = [];
 
     // 사용자 위치 마커
     const userMarker = L.marker([userLocation.lat, userLocation.lng], {
@@ -234,7 +129,7 @@ export default function CouponMapMain() {
     markersRef.current.push(userMarker);
 
     // 쿠폰 마커
-    couponList.forEach((coupon) => {
+    coupons.forEach((coupon) => {
       const marker = L.marker([coupon.lat, coupon.lng], {
         icon: L.divIcon({
           className: 'custom-coupon-marker',
@@ -252,10 +147,10 @@ export default function CouponMapMain() {
               cursor: pointer;
               transition: transform 0.2s;
             " onmouseover="this.style.transform='scale(1.1)'" onmouseout="this.style.transform='scale(1)'">
-              ${coupon.discount} ${coupon.name.length > 6 ? coupon.name.slice(0, 6) + '..' : coupon.name}
+              ${coupon.discount} ${coupon.name.split(' ')[0]}
             </div>
           `,
-          iconSize: [120, 40],
+          iconSize: [100, 40],
         }),
       }).addTo(leafletMap.current);
 
@@ -264,7 +159,7 @@ export default function CouponMapMain() {
       });
 
       // 반경 표시
-      const circle = L.circle([coupon.lat, coupon.lng], {
+      L.circle([coupon.lat, coupon.lng], {
         radius: coupon.radiusM,
         color: coupon.color,
         fillColor: coupon.color,
@@ -273,17 +168,7 @@ export default function CouponMapMain() {
       }).addTo(leafletMap.current);
 
       markersRef.current.push(marker);
-      circlesRef.current.push(circle);
     });
-
-    // 마커가 있으면 모든 마커가 보이도록 지도 조정
-    if (couponList.length > 0) {
-      const bounds = L.latLngBounds(
-        couponList.map((c: CouponMarker) => [c.lat, c.lng])
-      );
-      bounds.extend([userLocation.lat, userLocation.lng]);
-      leafletMap.current.fitBounds(bounds, { padding: [50, 50], maxZoom: 15 });
-    }
   };
 
   // 내 위치로 이동
@@ -299,149 +184,10 @@ export default function CouponMapMain() {
     return `${m}m`;
   };
 
-  // 거리 포맷
-  const formatDistance = (km: number) => {
-    if (km < 1) return `${Math.round(km * 1000)}m`;
-    return `${km.toFixed(1)}km`;
-  };
-
-  // 쿠폰 받기 (acquire API)
-  const handleClaimCoupon = async (coupon: CouponMarker) => {
-    setClaiming(true);
-    try {
-      const userId = getUserId();
-      const response = await fetch('/api/coupons/acquire', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          user_id: userId,
-          coupon_id: coupon.coupon_id,
-          lat: userLocation.lat,
-          lng: userLocation.lng,
-          claimed_via: 'map',
-        }),
-      });
-
-      const data = await response.json();
-
-      if (data.success) {
-        if (data.action === 'ACQUIRED') {
-          toast.success(`🎉 쿠폰을 받았어요! ${data.data?.title || coupon.name}`);
-
-          // localStorage에도 저장 (지갑과 연동)
-          const existing = JSON.parse(localStorage.getItem('my-coupons') || '[]');
-          localStorage.setItem('my-coupons', JSON.stringify([
-            ...existing,
-            {
-              ...coupon,
-              issue_id: data.data?.issue_id,
-              coupon_code: data.data?.coupon_code,
-              claimedAt: new Date().toISOString(),
-              status: 'available',
-            }
-          ]));
-
-          setTimeout(() => setSelectedCoupon(null), 1500);
-        } else if (data.action === 'MOTION_ONLY') {
-          toast.info('이미 더 좋은 쿠폰을 보유 중이에요!');
-        }
-      } else {
-        if (data.error === 'SOLD_OUT') {
-          toast.error('이 쿠폰은 모두 소진되었습니다');
-        } else if (data.error === 'COUPON_NOT_APPROVED') {
-          toast.error('아직 승인되지 않은 쿠폰입니다');
-        } else {
-          toast.error(data.error || '쿠폰 받기 실패');
-        }
-      }
-    } catch (error) {
-      console.error(error);
-      toast.error('쿠폰 받기 중 오류 발생');
-    } finally {
-      setClaiming(false);
-    }
-  };
-
-  // 선물하기
-  const handleGiftCoupon = async (coupon: CouponMarker) => {
-    setGifting(true);
-    try {
-      const userId = getUserId();
-
-      // 먼저 쿠폰을 획득
-      const acquireRes = await fetch('/api/coupons/acquire', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          user_id: userId,
-          coupon_id: coupon.coupon_id,
-          lat: userLocation.lat,
-          lng: userLocation.lng,
-          claimed_via: 'map',
-        }),
-      });
-      const acquireData = await acquireRes.json();
-
-      if (!acquireData.success || acquireData.action !== 'ACQUIRED') {
-        toast.error('쿠폰을 먼저 받아야 선물할 수 있어요');
-        setGifting(false);
-        return;
-      }
-
-      // 선물 토큰 생성
-      const giftRes = await fetch('/api/coupons/gift', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          coupon_issue_id: acquireData.data.issue_id,
-          sender_id: userId,
-        }),
-      });
-      const giftData = await giftRes.json();
-
-      if (giftData.success) {
-        const giftUrl = giftData.gift_url;
-
-        // 공유 기능
-        if (navigator.share) {
-          await navigator.share({
-            title: `${coupon.name} 쿠폰 선물`,
-            text: `${coupon.storeName}에서 사용할 수 있는 ${coupon.discount} 할인 쿠폰을 선물합니다!`,
-            url: giftUrl,
-          });
-          toast.success('선물 링크를 공유했어요!');
-        } else {
-          // 클립보드 복사
-          await navigator.clipboard.writeText(giftUrl);
-          toast.success('선물 링크가 복사되었어요! 친구에게 보내주세요 💝');
-        }
-
-        setTimeout(() => setSelectedCoupon(null), 1500);
-      } else {
-        toast.error(giftData.error || '선물 생성 실패');
-      }
-    } catch (error) {
-      console.error(error);
-      toast.error('선물하기 중 오류 발생');
-    } finally {
-      setGifting(false);
-    }
-  };
-
   return (
     <div className="relative w-full h-screen overflow-hidden">
       {/* 지도 */}
       <div ref={mapRef} className="w-full h-full" />
-
-      {/* 로딩 오버레이 */}
-      {loading && (
-        <div className="absolute inset-0 z-[1001] bg-black/20 flex items-center justify-center">
-          <div className="bg-white rounded-xl px-6 py-4 flex items-center gap-3 shadow-xl">
-            <Loader2 className="w-6 h-6 text-purple-500 animate-spin" />
-            <span className="text-sm font-medium">쿠폰 검색 중...</span>
-          </div>
-        </div>
-      )}
 
       {/* 상단 헤더 */}
       <div className="absolute top-0 left-0 right-0 z-[1000] bg-gradient-to-b from-black/50 to-transparent p-4">
@@ -450,22 +196,13 @@ export default function CouponMapMain() {
             <h1 className="text-white font-extrabold text-2xl drop-shadow-lg">AIRCTT</h1>
             <p className="text-white/90 text-xs">위치 기반 쿠폰 지도</p>
           </div>
-          <div className="flex gap-2">
-            <Button
-              size="icon"
-              onClick={() => router.push('/consumer/wallet')}
-              className="bg-white/20 backdrop-blur-md border border-white/30 text-white hover:bg-white/30"
-            >
-              <Wallet className="w-5 h-5" />
-            </Button>
-            <Button
-              size="icon"
-              onClick={() => setShowFilterPanel(!showFilterPanel)}
-              className="bg-white/20 backdrop-blur-md border border-white/30 text-white hover:bg-white/30"
-            >
-              <Sliders className="w-5 h-5" />
-            </Button>
-          </div>
+          <Button
+            size="icon"
+            onClick={() => setShowFilterPanel(!showFilterPanel)}
+            className="bg-white/20 backdrop-blur-md border border-white/30 text-white hover:bg-white/30"
+          >
+            <Sliders className="w-5 h-5" />
+          </Button>
         </div>
       </div>
 
@@ -530,11 +267,9 @@ export default function CouponMapMain() {
           <Card className="max-w-md mx-auto shadow-2xl">
             <CardContent className="p-6">
               <div className="flex items-start justify-between mb-4">
-                <div className="flex-1">
+                <div>
                   <Badge style={{ backgroundColor: selectedCoupon.color }} className="text-white mb-2">
-                    {selectedCoupon.discountType === 'percent'
-                      ? `${selectedCoupon.discount} OFF`
-                      : `${selectedCoupon.discount}원 할인`}
+                    {selectedCoupon.discount} OFF
                   </Badge>
                   <h3 className="text-xl font-bold text-slate-900 dark:text-white">
                     {selectedCoupon.name}
@@ -543,16 +278,6 @@ export default function CouponMapMain() {
                     <MapPin className="w-4 h-4" />
                     {selectedCoupon.storeName}
                   </p>
-                  {selectedCoupon.distanceKm > 0 && (
-                    <p className="text-xs text-slate-500 mt-1">
-                      {formatDistance(selectedCoupon.distanceKm)} 거리
-                    </p>
-                  )}
-                  {selectedCoupon.description && (
-                    <p className="text-sm text-slate-500 mt-2 line-clamp-2">
-                      {selectedCoupon.description}
-                    </p>
-                  )}
                 </div>
                 <Button
                   variant="ghost"
@@ -562,13 +287,50 @@ export default function CouponMapMain() {
                   <X className="w-5 h-5" />
                 </Button>
               </div>
-
-              {/* 액션 버튼 */}
               <div className="flex gap-2">
                 <Button
                   className="flex-1 bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600"
-                  onClick={() => handleClaimCoupon(selectedCoupon)}
-                  disabled={claiming || gifting}
+                  onClick={async () => {
+                    setClaiming(true);
+                    try {
+                      const response = await fetch('/api/coupons/claim', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                          couponId: selectedCoupon.id,
+                          userId: 'demo_user', // TODO: 실제 유저 ID
+                        }),
+                      });
+
+                      const data = await response.json();
+
+                      if (data.success) {
+                        toast.success('🎉 ' + data.message);
+
+                        // localStorage에 저장
+                        const existing = JSON.parse(localStorage.getItem('my-coupons') || '[]');
+                        localStorage.setItem('my-coupons', JSON.stringify([
+                          ...existing,
+                          {
+                            ...selectedCoupon,
+                            claimedAt: data.data.claimedAt,
+                            status: 'available',
+                          }
+                        ]));
+
+                        // 팝업 닫기
+                        setTimeout(() => setSelectedCoupon(null), 1500);
+                      } else {
+                        toast.error(data.error || '쿠폰 받기 실패');
+                      }
+                    } catch (error) {
+                      console.error(error);
+                      toast.error('쿠폰 받기 중 오류 발생');
+                    } finally {
+                      setClaiming(false);
+                    }
+                  }}
+                  disabled={claiming}
                 >
                   {claiming ? (
                     <>
@@ -581,32 +343,11 @@ export default function CouponMapMain() {
                 </Button>
                 <Button
                   variant="outline"
-                  className="flex-1"
-                  onClick={() => handleGiftCoupon(selectedCoupon)}
-                  disabled={claiming || gifting}
+                  onClick={() => router.push(`/consumer/stores/${selectedCoupon.id}`)}
                 >
-                  {gifting ? (
-                    <>
-                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                      처리 중...
-                    </>
-                  ) : (
-                    <>
-                      <Gift className="w-4 h-4 mr-2" />
-                      선물하기
-                    </>
-                  )}
+                  매장 상세
                 </Button>
               </div>
-
-              {/* 매장 상세 버튼 */}
-              <Button
-                variant="ghost"
-                className="w-full mt-2 text-sm"
-                onClick={() => router.push(`/consumer/stores/${selectedCoupon.id}`)}
-              >
-                매장 상세 보기
-              </Button>
             </CardContent>
           </Card>
         </div>

@@ -29,9 +29,9 @@ export default function ConsumerHeader({ showBack = true, showWallet = true, tit
               variant="ghost"
               size="icon"
               onClick={() => router.back()}
-              className="h-7 w-7 sm:h-8 sm:w-8 md:h-9 md:w-9 touch-manipulation"
+              className="h-10 w-10 sm:h-11 sm:w-11 md:h-12 md:w-12 touch-manipulation"
             >
-              <ArrowLeft className="h-3.5 w-3.5 sm:h-4 sm:w-4 md:h-5 md:w-5" />
+              <ArrowLeft className="h-5 w-5 sm:h-6 sm:w-6 md:h-7 md:w-7" />
             </Button>
           )}
           <div className="flex items-center gap-1.5 sm:gap-2">
@@ -41,11 +41,11 @@ export default function ConsumerHeader({ showBack = true, showWallet = true, tit
               </div>
             )}
             <div className="flex flex-col">
-              <span className="font-bold text-sm sm:text-base md:text-lg leading-none bg-gradient-to-r from-cyan-500 via-purple-500 to-pink-500 bg-clip-text text-transparent">
+              <span className="font-bold text-base sm:text-lg md:text-xl leading-none bg-gradient-to-r from-cyan-500 via-purple-500 to-pink-500 bg-clip-text text-transparent">
                 {title || t('home.title')}
               </span>
               {isHomePage && (
-                <span className="text-[9px] sm:text-[10px] md:text-xs text-muted-foreground">
+                <span className="text-xs sm:text-sm text-muted-foreground">
                   {t('home.subtitle')}
                 </span>
               )}
@@ -60,9 +60,9 @@ export default function ConsumerHeader({ showBack = true, showWallet = true, tit
               variant="ghost"
               size="icon"
               onClick={() => router.push('/consumer/wallet')}
-              className="h-7 w-7 sm:h-8 sm:w-8 md:h-9 md:w-9 touch-manipulation"
+              className="h-10 w-10 sm:h-11 sm:w-11 md:h-12 md:w-12 touch-manipulation"
             >
-              <Wallet className="h-3.5 w-3.5 sm:h-4 sm:w-4 md:h-5 md:w-5" />
+              <Wallet className="h-5 w-5 sm:h-6 sm:w-6 md:h-7 md:w-7" />
             </Button>
           )}
         </div>

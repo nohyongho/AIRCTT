@@ -35,8 +35,8 @@ export default function BottomTabNav() {
                   : 'text-muted-foreground hover:text-foreground active:bg-muted/50'
               }`}
             >
-              <Icon className="h-4 w-4 sm:h-5 sm:w-5" />
-              <span className="text-[9px] sm:text-[10px] md:text-xs font-medium">{tab.label}</span>
+              <Icon className="h-6 w-6 sm:h-7 sm:w-7" />
+              <span className="text-sm sm:text-base font-medium">{tab.label}</span>
             </Link>
           );
         })}
