@@ -1,26 +1,34 @@
 'use client';
 
+import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import CouponGameWindow from '@/components/consumer/CouponGameWindow';
+import CouponGame3D from '@/components/consumer/CouponGame3D';
 import { toast } from 'sonner';
 
 export default function GamePage() {
     const router = useRouter();
 
+    // 게임 페이지는 몰입감을 위해 기본 다크모드!
+    useEffect(() => {
+        const html = document.documentElement;
+        const wasDark = html.classList.contains('dark');
+        html.classList.add('dark');
+        return () => {
+            if (!wasDark) html.classList.remove('dark');
+        };
+    }, []);
+
     const handleCouponAcquired = (amount: number, name: string) => {
-        toast.success(`축하합니다! ${name}을(를) 획득했습니다!`, {
-            description: '지갑에서 확인하세요.',
-            duration: 3000,
-        });
+        // Game has its own UI for this
     };
 
     const handleClose = () => {
-        router.back();
+        router.push('/consumer');
     };
 
     return (
-        <div className="w-full h-screen bg-black">
-            <CouponGameWindow
+        <div className="w-full h-screen dark">
+            <CouponGame3D
                 onCouponAcquired={handleCouponAcquired}
                 onClose={handleClose}
                 lang="ko"
