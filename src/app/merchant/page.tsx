@@ -390,9 +390,53 @@ export default function MerchantHomePage() {
                       setIsDetailOpen(true);
                     }}
                   >
-                    <div className="aspect-video relative bg-black/20">
+                    <div
+                      className="aspect-video relative bg-black/20 group/card"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        // 업로드 input 트리거
+                        const input = document.createElement('input');
+                        input.type = 'file';
+                        input.accept = 'image/*,video/*,.mp4,.mov,.avi,.webm,.gif,.png,.jpg,.jpeg,.webp';
+                        input.onchange = async (ev) => {
+                          const file = (ev.target as HTMLInputElement).files?.[0];
+                          if (!file) return;
+                          if (file.size > 100 * 1024 * 1024) {
+                            alert('파일 크기가 100MB를 초과합니다.');
+                            return;
+                          }
+                          // 업로드 시작
+                          setUploading(true);
+                          setUploadResult(null);
+                          try {
+                            const formData = new FormData();
+                            formData.append('file', file);
+                            formData.append('coupon_id', coupon.id);
+                            const res = await fetch('/api/merchant/upload', {
+                              method: 'POST',
+                              body: formData,
+                            });
+                            const data = await res.json();
+                            if (data.success) {
+                              setCoupons(prev => prev.map(c =>
+                                c.id === coupon.id ? { ...c, imageUrl: data.url, mediaType: data.media_type } : c
+                              ));
+                              setUploadResult({ url: data.url, type: data.media_type });
+                              setTimeout(() => setUploadResult(null), 3000);
+                            } else {
+                              alert(data.error || '업로드 실패');
+                            }
+                          } catch {
+                            alert('업로드 중 오류 발생');
+                          } finally {
+                            setUploading(false);
+                          }
+                        };
+                        input.click();
+                      }}
+                    >
                       {coupon.imageUrl ? (
-                        coupon.mediaType === 'VIDEO' || (coupon.imageUrl.startsWith('blob:') && coupon.imageUrl.includes('video')) ? (
+                        coupon.mediaType === 'VIDEO' || coupon.imageUrl.includes('/videos/') || (coupon.imageUrl.startsWith('blob:') && coupon.imageUrl.includes('video')) ? (
                           <video
                             src={coupon.imageUrl}
                             className="w-full h-full object-cover"
@@ -410,11 +454,34 @@ export default function MerchantHomePage() {
                           />
                         )
                       ) : (
-                        <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-violet-500/20 to-purple-500/20">
-                          <Ticket className="w-10 h-10 text-white/20" />
+                        <div className="w-full h-full flex flex-col items-center justify-center bg-gradient-to-br from-violet-500/20 to-purple-500/20 gap-2">
+                          <Upload className="w-10 h-10 text-white/40" />
+                          <span className="text-white/50 text-xs font-bold">터치하여 업로드</span>
+                          <span className="text-white/30 text-[10px]">이미지·영상 (최대 100MB)</span>
                         </div>
                       )}
-                      <div className="absolute top-2 right-2">
+                      {/* 호버/터치 시 업로드 오버레이 */}
+                      {coupon.imageUrl && (
+                        <div className="absolute inset-0 bg-black/60 opacity-0 group-hover/card:opacity-100 active:opacity-100 transition-opacity flex flex-col items-center justify-center gap-1">
+                          <Upload className="w-8 h-8 text-white" />
+                          <span className="text-white text-xs font-bold">터치하여 교체</span>
+                        </div>
+                      )}
+                      {/* 업로드 중 오버레이 */}
+                      {uploading && (
+                        <div className="absolute inset-0 bg-black/70 flex flex-col items-center justify-center gap-2 z-10">
+                          <Loader2 className="w-10 h-10 text-purple-400 animate-spin" />
+                          <span className="text-white text-sm font-bold">업로드 중...</span>
+                        </div>
+                      )}
+                      {/* 성공 표시 */}
+                      {uploadResult && (
+                        <div className="absolute top-2 left-2 bg-green-500 text-white px-3 py-1 rounded-full text-xs font-bold flex items-center gap-1 z-10 animate-bounce">
+                          <CheckCircle className="w-3 h-3" />
+                          저장 완료!
+                        </div>
+                      )}
+                      <div className="absolute top-2 right-2 z-10">
                         <Badge className="bg-green-500 text-white border-0 animate-pulse">
                           LIVE
                         </Badge>

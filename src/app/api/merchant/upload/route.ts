@@ -19,11 +19,11 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // 파일 크기 제한 (50MB)
-    const MAX_SIZE = 50 * 1024 * 1024;
+    // 파일 크기 제한 (100MB)
+    const MAX_SIZE = 100 * 1024 * 1024;
     if (file.size > MAX_SIZE) {
       return NextResponse.json(
-        { success: false, error: '파일 크기가 50MB를 초과합니다.' },
+        { success: false, error: '파일 크기가 100MB를 초과합니다.' },
         { status: 400 }
       );
     }
