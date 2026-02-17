@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
+import dynamic from 'next/dynamic';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Plus,
@@ -27,7 +28,13 @@ import {
   Zap,
   Upload,
   Image as ImageIcon,
+  MapPin,
+  Globe,
+  Map,
 } from 'lucide-react';
+
+// ★ 지도 컴포넌트 (SSR 방지 - Leaflet은 window 필요)
+const CouponRadiusMap = dynamic(() => import('@/components/merchant/CouponRadiusMap'), { ssr: false });
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent } from '@/components/ui/card';
@@ -76,7 +83,19 @@ interface NewCouponFormState {
   totalQuantity: number;
   image: File | null;
   imagePreview: string | null;
+  // ★ 배포반경
+  radiusType: 'store' | 'custom' | 'nationwide';
+  radiusM: number;
+  centerLat: number;
+  centerLng: number;
 }
+
+// 반경 표시 포맷
+const formatRadius = (m: number) => {
+  if (m >= 1000000) return `${(m / 1000).toLocaleString()}km`;
+  if (m >= 1000) return `${(m / 1000).toFixed(1)}km`;
+  return `${m}m`;
+};
 
 export default function MerchantCouponsPage() {
   const router = useRouter();
@@ -93,6 +112,7 @@ export default function MerchantCouponsPage() {
   const [isAIGenerating, setIsAIGenerating] = useState(false);
   const [creationStep, setCreationStep] = useState<CreationStep>('FORM');
 
+  const [showRadiusMap, setShowRadiusMap] = useState(false);
   const [newCoupon, setNewCoupon] = useState<NewCouponFormState>({
     name: '새 쿠폰',
     description: '쿠폰 설명',
@@ -105,6 +125,10 @@ export default function MerchantCouponsPage() {
     totalQuantity: 100,
     image: null,
     imagePreview: null,
+    radiusType: 'store',
+    radiusM: 5000,
+    centerLat: 37.5665,
+    centerLng: 126.978,
   });
 
   useEffect(() => {
@@ -234,6 +258,10 @@ export default function MerchantCouponsPage() {
       totalQuantity: 100,
       image: null,
       imagePreview: null,
+      radiusType: 'store',
+      radiusM: 5000,
+      centerLat: 37.5665,
+      centerLng: 126.978,
     });
 
     setIsAIGenerating(false);
@@ -270,6 +298,7 @@ export default function MerchantCouponsPage() {
     }
 
     const created = couponService.create({
+      id: `coupon_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
       code: '',
       merchantId: '',
       title: newCoupon.name,
@@ -289,6 +318,11 @@ export default function MerchantCouponsPage() {
       imageUrl: newCoupon.imagePreview || undefined,
       mediaType: newCoupon.image?.type.startsWith('video/') ? 'VIDEO' : 'IMAGE',
       createdAt: new Date().toISOString(),
+      // ★ 배포 반경 정보 추가
+      radiusType: newCoupon.radiusType,
+      radiusM: newCoupon.radiusM,
+      centerLat: newCoupon.centerLat,
+      centerLng: newCoupon.centerLng,
     } as MerchantCoupon);
 
     const normalized = {
@@ -311,6 +345,10 @@ export default function MerchantCouponsPage() {
       totalQuantity: 100,
       image: null,
       imagePreview: null,
+      radiusType: 'store',
+      radiusM: 5000,
+      centerLat: 37.5665,
+      centerLng: 126.978,
     });
     toast.success('쿠폰이 생성되었습니다');
   };
@@ -651,8 +689,8 @@ export default function MerchantCouponsPage() {
 
       {/* Create Coupon Dialog */}
       <Dialog open={isCreateOpen} onOpenChange={setIsCreateOpen}>
-        <DialogContent className="glass-card max-w-2xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
+        <DialogContent className="glass-card max-w-2xl max-h-[90vh] flex flex-col">
+          <DialogHeader className="flex-shrink-0">
             <DialogTitle className="flex items-center gap-2">
               <Sparkles className="w-5 h-5 text-primary" />새 쿠폰 만들기
             </DialogTitle>
@@ -660,6 +698,7 @@ export default function MerchantCouponsPage() {
               새로운 할인 쿠폰을 생성합니다
             </DialogDescription>
           </DialogHeader>
+          <div className="flex-1 overflow-y-auto pr-2" style={{ maxHeight: 'calc(90vh - 160px)' }}>
 
           {creationStep === 'FORM' ? (
             <div className="space-y-6 py-4">
@@ -903,6 +942,90 @@ export default function MerchantCouponsPage() {
                     className="bg-white/5 border-white/10"
                   />
                 </div>
+
+                {/* ★ 배포 반경 설정 */}
+                <div className="space-y-3 p-4 bg-emerald-500/10 rounded-lg border border-emerald-500/20">
+                  <div className="flex items-center gap-2 mb-1">
+                    <MapPin className="w-4 h-4 text-emerald-400" />
+                    <Label className="text-emerald-400 font-semibold">배포 반경</Label>
+                  </div>
+                  <Select
+                    value={newCoupon.radiusType}
+                    onValueChange={(v: 'store' | 'custom' | 'nationwide') => {
+                      setNewCoupon({ ...newCoupon, radiusType: v });
+                      if (v === 'custom') setShowRadiusMap(true);
+                    }}
+                  >
+                    <SelectTrigger className="bg-white/5 border-white/10">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="store">매장 기준 반경</SelectItem>
+                      <SelectItem value="custom">위치 직접 지정</SelectItem>
+                      <SelectItem value="nationwide">전국 배포</SelectItem>
+                    </SelectContent>
+                  </Select>
+
+                  {/* 지도 + 슬라이더 (전국배포 제외) */}
+                  {newCoupon.radiusType !== 'nationwide' && (
+                    <div className="space-y-3">
+                      {/* 미니 지도 — 클릭하면 팝업 확대 */}
+                      <div
+                        className="relative rounded-xl overflow-hidden border-2 border-emerald-500/30 cursor-pointer hover:border-emerald-400 transition-all group"
+                        onClick={() => setShowRadiusMap(true)}
+                      >
+                        <div className="w-full h-[180px]">
+                          <CouponRadiusMap
+                            radiusM={newCoupon.radiusM}
+                            onRadiusChange={(m) => setNewCoupon((prev) => ({ ...prev, radiusM: m }))}
+                            centerLat={newCoupon.centerLat}
+                            centerLng={newCoupon.centerLng}
+                            onCenterChange={(lat, lng) => setNewCoupon((prev) => ({ ...prev, centerLat: lat, centerLng: lng }))}
+                            onClose={() => {}}
+                            onConfirm={() => {}}
+                            inline={true}
+                          />
+                        </div>
+                        <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-all flex items-center justify-center">
+                          <div className="bg-white/90 backdrop-blur-sm px-4 py-2 rounded-full shadow-lg opacity-0 group-hover:opacity-100 transition-all flex items-center gap-2">
+                            <Map className="w-5 h-5 text-indigo-600" />
+                            <span className="font-bold text-indigo-600 text-sm">탭하여 확대 🔍</span>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* 반경 표시 + 슬라이더 */}
+                      <div className="flex justify-between text-sm">
+                        <span className="font-bold text-emerald-400">
+                          📍 반경: {formatRadius(newCoupon.radiusM)}
+                        </span>
+                        <span className="text-gray-500 text-xs">50m ~ 20,000km</span>
+                      </div>
+                      <input
+                        type="range"
+                        min={50} max={20000000}
+                        step={newCoupon.radiusM < 1000 ? 50 : newCoupon.radiusM < 10000 ? 500 : newCoupon.radiusM < 100000 ? 5000 : 50000}
+                        value={newCoupon.radiusM}
+                        onChange={(e) => setNewCoupon({ ...newCoupon, radiusM: parseInt(e.target.value) })}
+                        className="w-full accent-emerald-500 h-3"
+                      />
+                      <div className="flex justify-between text-xs text-gray-500">
+                        <span>50m</span><span>500m</span><span>5km</span><span>50km</span><span>500km</span><span>20,000km</span>
+                      </div>
+                      {newCoupon.centerLat !== 37.5665 && (
+                        <p className="text-sm text-emerald-400 text-center font-medium">
+                          ✅ 설정됨: {newCoupon.centerLat.toFixed(4)}, {newCoupon.centerLng.toFixed(4)} / 반경 {formatRadius(newCoupon.radiusM)}
+                        </p>
+                      )}
+                    </div>
+                  )}
+                  {newCoupon.radiusType === 'nationwide' && (
+                    <div className="flex items-center gap-2 p-3 bg-white/5 rounded-lg">
+                      <Globe className="w-5 h-5 text-blue-400" />
+                      <span className="text-sm text-gray-400">전국 모든 고객에게 노출됩니다</span>
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
           ) : (
@@ -949,7 +1072,9 @@ export default function MerchantCouponsPage() {
             </div>
           )}
 
-          <DialogFooter>
+          </div>{/* end scroll area */}
+
+          <DialogFooter className="flex-shrink-0 pt-4 border-t border-white/10">
             <Button
               variant="ghost"
               onClick={() => {
@@ -977,6 +1102,22 @@ export default function MerchantCouponsPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* ★ 쿠폰 배포 위치 지도 모달 */}
+      {showRadiusMap && (
+        <CouponRadiusMap
+          radiusM={newCoupon.radiusM}
+          onRadiusChange={(m) => setNewCoupon((prev) => ({ ...prev, radiusM: m }))}
+          centerLat={newCoupon.centerLat}
+          centerLng={newCoupon.centerLng}
+          onCenterChange={(lat, lng) => setNewCoupon((prev) => ({ ...prev, centerLat: lat, centerLng: lng }))}
+          onClose={() => setShowRadiusMap(false)}
+          onConfirm={() => {
+            setShowRadiusMap(false);
+            toast.success(`배포 위치 설정 완료! 반경 ${formatRadius(newCoupon.radiusM)}`);
+          }}
+        />
+      )}
 
       {/* Delete Confirmation Dialog */}
       <Dialog open={isDeleteOpen} onOpenChange={setIsDeleteOpen}>

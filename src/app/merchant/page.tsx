@@ -250,8 +250,8 @@ export default function MerchantHomePage() {
               <div className="absolute -bottom-1 -right-1 w-4 h-4 bg-green-500 rounded-full border-2 border-white dark:border-gray-900" />
             </div>
             <div>
-              <h1 className="text-white font-bold text-lg">CouponTalkTalk</h1>
-              <p className="text-white/70 text-xs">Business Pro</p>
+              <h1 className="text-white font-bold text-xl sm:text-2xl">구름장터</h1>
+              <p className="text-white/70 text-sm sm:text-base">사장님 전용</p>
             </div>
           </motion.div>
 
@@ -795,6 +795,22 @@ export default function MerchantHomePage() {
           )}
         </DialogContent>
       </Dialog>
+
+      {/* 쿠폰톡톡 바로가기 플로팅 버튼 */}
+      <motion.div
+        initial={{ scale: 0 }}
+        animate={{ scale: 1 }}
+        transition={{ delay: 0.5, type: 'spring' }}
+        className="fixed bottom-6 right-6 z-50"
+      >
+        <Button
+          onClick={() => router.push('/consumer')}
+          className="h-14 px-6 bg-gradient-to-r from-purple-500 via-pink-500 to-red-500 hover:from-purple-600 hover:via-pink-600 hover:to-red-600 text-white font-bold shadow-2xl shadow-purple-500/50 rounded-full flex items-center gap-2 hover:scale-110 transition-transform"
+        >
+          <Sparkles className="w-5 h-5" />
+          쿠폰톡톡
+        </Button>
+      </motion.div>
     </div >
   );
 }
