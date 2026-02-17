@@ -98,7 +98,11 @@ export async function POST(request: NextRequest) {
             location_radius_km,
             ar_enabled,
             ar_asset_url,
-            terms
+            terms,
+            // Platform v1 추가 필드
+            product_sku,
+            asset_type,
+            asset_url,
         } = body;
 
         // 필수 파라미터 검증
@@ -150,8 +154,8 @@ export async function POST(request: NextRequest) {
             }
         }
 
-        // 쿠폰 생성
-        const couponData: Partial<Coupon> = {
+        // 쿠폰 생성 (product_sku, asset_type, coupon_group_key 포함)
+        const couponData: Partial<Coupon> & Record<string, unknown> = {
             merchant_id,
             store_id: store_id || null,
             title,
@@ -169,7 +173,16 @@ export async function POST(request: NextRequest) {
             ar_enabled: ar_enabled ?? false,
             ar_asset_url: ar_asset_url || null,
             terms: terms || null,
-            is_active: true
+            is_active: true,
+            // Platform v1: 단일상품 정책 + 크랙커 에셋 + 승인 워크플로우
+            product_sku: product_sku || null,
+            asset_type: asset_type || 'IMAGE_2D',
+            asset_url: asset_url || null,
+            // coupon_group_key는 DB 트리거가 자동 생성 (store_id:product_sku)
+            // 승인 대기 상태로 시작 (에셋이 있으면 PENDING_APPROVAL, 없으면 DRAFT)
+            approval_status: (asset_url || product_sku) ? 'PENDING_APPROVAL' : 'DRAFT',
+            // 단가 계산
+            unit_price: getUnitPrice(asset_type),
         };
 
         const { data: coupon, error: createError } = await client
@@ -182,9 +195,30 @@ export async function POST(request: NextRequest) {
             throw createError;
         }
 
+        // 이벤트 기록
+        if (coupon) {
+            try {
+                await client.from('coupon_events').insert({
+                    store_id: coupon.store_id,
+                    coupon_id: coupon.id,
+                    event_type: 'ISSUED',
+                    meta: {
+                        product_sku: coupon.product_sku,
+                        asset_type: coupon.asset_type,
+                        discount_type: coupon.discount_type,
+                        discount_value: coupon.discount_value,
+                        total_issuable: max_issues,
+                    },
+                });
+            } catch { /* fire-and-forget */ }
+        }
+
         return NextResponse.json({
             success: true,
-            coupon
+            coupon,
+            estimated_cost: coupon?.unit_price && max_issues
+                ? coupon.unit_price * max_issues
+                : null,
         }, { status: 201 });
 
     } catch (error: any) {
@@ -194,4 +228,13 @@ export async function POST(request: NextRequest) {
             { status: 500 }
         );
     }
+}
+
+function getUnitPrice(assetType?: string): number {
+    const prices: Record<string, number> = {
+        'IMAGE_2D': 50,
+        'MODEL_3D': 80,
+        'VIDEO': 100,
+    };
+    return prices[assetType || 'IMAGE_2D'] || 50;
 }

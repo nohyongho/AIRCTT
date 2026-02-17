@@ -32,17 +32,27 @@ export async function GET(request: NextRequest) {
 
     const postgrest = createPostgrestClient();
 
-    // RPC 함수 호출 (DB에 get_nearby_coupons 함수가 있는 경우)
+    // RPC 함수 호출 (v2: 승인 필터 + 에셋 정보 포함)
     const { data: nearbyCoupons, error: rpcError } = await postgrest.rpc(
-      'get_nearby_coupons',
+      'get_nearby_coupons_v2',
       {
         user_lat: lat,
         user_lng: lng,
-        radius_km: radius,
-        category_filter: category,
+        search_radius_km: radius,
         limit_count: limit,
       }
-    );
+    ).then(res => {
+      // v2 함수가 없으면 v1으로 폴백
+      if (res.error?.code === '42883') {
+        return postgrest.rpc('get_nearby_coupons', {
+          user_lat: lat,
+          user_lng: lng,
+          search_radius_km: radius,
+          limit_count: limit,
+        });
+      }
+      return res;
+    });
 
     if (rpcError) {
       console.error('RPC Error:', rpcError);
@@ -59,6 +69,11 @@ export async function GET(request: NextRequest) {
           discount_type,
           discount_value,
           valid_to,
+          product_sku,
+          coupon_group_key,
+          asset_type,
+          asset_url,
+          approval_status,
           stores!inner(
             id,
             name,
@@ -70,6 +85,7 @@ export async function GET(request: NextRequest) {
         .eq('is_active', true)
         .or(`valid_from.is.null,valid_from.lte.${new Date().toISOString()}`)
         .or(`valid_to.is.null,valid_to.gte.${new Date().toISOString()}`)
+        .or('approval_status.is.null,approval_status.eq.APPROVED')
         .limit(limit);
 
       if (queryError) {
@@ -101,6 +117,11 @@ export async function GET(request: NextRequest) {
             store_address: store.address,
             distance_km: Math.round(distance * 100) / 100,
             valid_until: coupon.valid_to,
+            product_sku: coupon.product_sku,
+            coupon_group_key: coupon.coupon_group_key,
+            asset_type: coupon.asset_type,
+            asset_url: coupon.asset_url,
+            approval_status: coupon.approval_status,
           };
         })
         .filter(Boolean)
