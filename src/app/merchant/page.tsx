@@ -394,49 +394,42 @@ export default function MerchantHomePage() {
                       className="aspect-video relative bg-black/20 group/card"
                       onClick={(e) => {
                         e.stopPropagation();
-                        // 업로드 input 트리거
                         const input = document.createElement('input');
                         input.type = 'file';
                         input.accept = 'image/*,video/*,.mp4,.mov,.avi,.webm,.gif,.png,.jpg,.jpeg,.webp';
-                        input.onchange = async (ev) => {
+                        input.onchange = (ev) => {
                           const file = (ev.target as HTMLInputElement).files?.[0];
                           if (!file) return;
                           if (file.size > 100 * 1024 * 1024) {
                             alert('파일 크기가 100MB를 초과합니다.');
                             return;
                           }
-                          // 업로드 시작
-                          setUploading(true);
-                          setUploadResult(null);
-                          try {
-                            const formData = new FormData();
-                            formData.append('file', file);
-                            formData.append('coupon_id', coupon.id);
-                            const res = await fetch('/api/merchant/upload', {
-                              method: 'POST',
-                              body: formData,
-                            });
-                            const data = await res.json();
-                            if (data.success) {
-                              setCoupons(prev => prev.map(c =>
-                                c.id === coupon.id ? { ...c, imageUrl: data.url, mediaType: data.media_type } : c
-                              ));
-                              setUploadResult({ url: data.url, type: data.media_type });
-                              setTimeout(() => setUploadResult(null), 3000);
-                            } else {
-                              alert(data.error || '업로드 실패');
-                            }
-                          } catch {
-                            alert('업로드 중 오류 발생');
-                          } finally {
-                            setUploading(false);
-                          }
+                          // 즉시 로컬 미리보기 (서버 불필요)
+                          const blobUrl = URL.createObjectURL(file);
+                          const isVideo = file.type.startsWith('video/');
+                          setCoupons(prev => prev.map(c =>
+                            c.id === coupon.id ? { ...c, imageUrl: blobUrl, mediaType: isVideo ? 'VIDEO' : 'IMAGE' } : c
+                          ));
+                          // 백그라운드로 서버 업로드 시도 (실패해도 미리보기는 유지)
+                          const formData = new FormData();
+                          formData.append('file', file);
+                          formData.append('coupon_id', coupon.id);
+                          fetch('/api/merchant/upload', { method: 'POST', body: formData })
+                            .then(r => r.json())
+                            .then(data => {
+                              if (data.success && data.url && !data.url.startsWith('data:')) {
+                                setCoupons(prev => prev.map(c =>
+                                  c.id === coupon.id ? { ...c, imageUrl: data.url } : c
+                                ));
+                              }
+                            })
+                            .catch(() => { /* 서버 실패해도 로컬 미리보기 유지 */ });
                         };
                         input.click();
                       }}
                     >
                       {coupon.imageUrl ? (
-                        coupon.mediaType === 'VIDEO' || coupon.imageUrl.includes('/videos/') || (coupon.imageUrl.startsWith('blob:') && coupon.imageUrl.includes('video')) ? (
+                        coupon.mediaType === 'VIDEO' || coupon.imageUrl.includes('/videos/') ? (
                           <video
                             src={coupon.imageUrl}
                             className="w-full h-full object-cover"
