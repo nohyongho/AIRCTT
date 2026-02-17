@@ -1,10 +1,11 @@
 'use client';
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
     Sparkles, X, Gift, Trophy, Coins, Zap, ArrowLeft,
-    Pause, Play, RotateCcw, Wallet, Timer, Flame, Star
+    Pause, Play, RotateCcw, Wallet, Timer, Flame, Star, Loader2, CheckCircle, AlertCircle
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -125,6 +126,20 @@ const soundEngine = new GameSoundEngine();
    Types & Constants
    ============================================= */
 
+// ===== DB 쿠폰 데이터 인터페이스 =====
+interface GameCouponData {
+    coupon_id: string;
+    store_id: string;
+    store_name: string;
+    coupon_group_key?: string;
+    display_label: string;
+    asset_type?: string;
+    asset_url?: string | null;
+    discount_type: 'percent' | 'amount';
+    discount_value: number;
+    title: string;
+}
+
 interface CouponType {
     emoji: string;
     name: string;
@@ -133,6 +148,57 @@ interface CouponType {
     points: number;
     bgLight: string;
     bgDark: string;
+    couponData?: GameCouponData; // DB 쿠폰 데이터 연결
+}
+
+// ===== 유저 ID 헬퍼 =====
+function getUserId(): string {
+    if (typeof window === 'undefined') return 'anonymous';
+    try {
+        const session = localStorage.getItem('airctt_consumer_session');
+        if (session) {
+            const parsed = JSON.parse(session);
+            return parsed.user_id || parsed.consumer_id || 'anonymous';
+        }
+    } catch { /* ignore */ }
+    return `anon_${Math.random().toString(36).substring(2, 10)}`;
+}
+
+// ===== DB 쿠폰 → CouponType 변환 =====
+const DISCOUNT_COLORS = [
+    { color: '#FF6B35', bgLight: '#FFF3ED', bgDark: '#3D1A0A' },
+    { color: '#7C3AED', bgLight: '#F0EAFF', bgDark: '#1E0A3D' },
+    { color: '#E11D48', bgLight: '#FFF0F3', bgDark: '#3D0A15' },
+    { color: '#0D9488', bgLight: '#F0FDFA', bgDark: '#0A2D2A' },
+    { color: '#2563EB', bgLight: '#EFF6FF', bgDark: '#0A1A3D' },
+    { color: '#EC4899', bgLight: '#FDF2F8', bgDark: '#3D0A25' },
+    { color: '#059669', bgLight: '#ECFDF5', bgDark: '#0A3D25' },
+    { color: '#D97706', bgLight: '#FFFBEB', bgDark: '#3D2A0A' },
+];
+
+const CATEGORY_EMOJIS: Record<string, string> = {
+    'IMAGE_2D': '🎫', 'IMAGE_3D': '🎯', 'LOTTIE': '🎪',
+    'AR_OBJECT': '🌟', 'VIDEO': '🎬', 'SOUND': '🔔',
+};
+
+function dbCouponToType(coupon: GameCouponData, index: number): CouponType {
+    const colorSet = DISCOUNT_COLORS[index % DISCOUNT_COLORS.length];
+    const emoji = CATEGORY_EMOJIS[coupon.asset_type || 'IMAGE_2D'] || '🎫';
+    const discountLabel = coupon.discount_type === 'percent'
+        ? `${coupon.discount_value}% OFF`
+        : `${coupon.discount_value.toLocaleString()}원 할인`;
+    const points = coupon.discount_type === 'percent'
+        ? Math.floor(coupon.discount_value * 3)
+        : Math.min(300, Math.floor(coupon.discount_value / 100));
+
+    return {
+        emoji,
+        name: coupon.title || coupon.store_name || '쿠폰',
+        discount: discountLabel,
+        ...colorSet,
+        points: Math.max(50, points),
+        couponData: coupon,
+    };
 }
 
 interface FallingCoupon {
@@ -202,8 +268,14 @@ const COUPON_TYPES: CouponType[] = [
    ============================================= */
 
 export default function CouponGame3D({ onCouponAcquired, onClose, lang = 'ko' }: GameProps) {
+    const router = useRouter();
     const canvasRef = useRef<HTMLCanvasElement>(null);
     const containerRef = useRef<HTMLDivElement>(null);
+
+    // DB에서 가져온 실제 nearby 쿠폰
+    const nearbyCouponsRef = useRef<CouponType[]>([]);
+    const spawnIndexRef = useRef(0);
+
     const gameRef = useRef<{
         isRunning: boolean;
         isPaused: boolean;
@@ -242,13 +314,22 @@ export default function CouponGame3D({ onCouponAcquired, onClose, lang = 'ko' }:
         comboTimer: 0,
     });
 
-    const [gameState, setGameState] = useState<'start' | 'playing' | 'paused' | 'over'>('start');
+    const [gameState, setGameState] = useState<'loading' | 'start' | 'playing' | 'paused' | 'over'>('loading');
     const [score, setScore] = useState(0);
     const [combo, setCombo] = useState(0);
     const [timeLeft, setTimeLeft] = useState(60);
     const [level, setLevel] = useState(1);
     const [comboToast, setComboToast] = useState<string | null>(null);
     const [finalStats, setFinalStats] = useState({ score: 0, coupons: 0, maxCombo: 0, level: 1, wonCoupons: [] as CouponType[] });
+    const [acquireResult, setAcquireResult] = useState<{
+        action: string;
+        title?: string;
+        discount_value?: number;
+        discount_type?: string;
+        store_name?: string;
+        coupon_code?: string;
+    } | null>(null);
+    const [caughtDbCoupons, setCaughtDbCoupons] = useState<GameCouponData[]>([]);
 
     const timerRef = useRef<NodeJS.Timeout | null>(null);
     const levelRef = useRef<NodeJS.Timeout | null>(null);
@@ -269,12 +350,68 @@ export default function CouponGame3D({ onCouponAcquired, onClose, lang = 'ko' }:
         return () => window.removeEventListener('resize', resizeCanvas);
     }, [resizeCanvas]);
 
-    // Spawn coupon
+    // ===== 시작 시 nearby API로 실제 쿠폰 가져오기 =====
+    useEffect(() => {
+        const fetchNearbyCoupons = async () => {
+            try {
+                const pos = await new Promise<GeolocationPosition>((resolve, reject) => {
+                    navigator.geolocation.getCurrentPosition(resolve, reject, {
+                        enableHighAccuracy: true,
+                        timeout: 10000,
+                        maximumAge: 60000,
+                    });
+                });
+                const lat = pos.coords.latitude;
+                const lng = pos.coords.longitude;
+                const res = await fetch(`/api/coupons/nearby?lat=${lat}&lng=${lng}&radius=5&limit=30`);
+                const result = await res.json();
+
+                if (result.success && result.data?.length > 0) {
+                    const dbTypes: CouponType[] = result.data.map((c: any, idx: number) => {
+                        const gameCoupon: GameCouponData = {
+                            coupon_id: c.coupon_id,
+                            store_id: c.store_id,
+                            store_name: c.store_name || '',
+                            coupon_group_key: c.coupon_group_key,
+                            display_label: `${c.discount_type === 'percent' ? c.discount_value + '%' : c.discount_value + '원'} / ${c.product_sku || c.title}`,
+                            asset_type: c.asset_type || 'IMAGE_2D',
+                            asset_url: c.asset_url,
+                            discount_type: c.discount_type,
+                            discount_value: c.discount_value,
+                            title: c.title,
+                        };
+                        return dbCouponToType(gameCoupon, idx);
+                    });
+                    nearbyCouponsRef.current = dbTypes;
+                    console.log(`[Game] ${dbTypes.length}개 실제 쿠폰 로드됨`);
+                } else {
+                    console.log('[Game] 주변 쿠폰 없음 → 데모 모드');
+                }
+            } catch (e) {
+                console.warn('[Game] 위치/API 오류 → 데모 모드:', e);
+            } finally {
+                setGameState('start');
+            }
+        };
+        fetchNearbyCoupons();
+    }, []);
+
+    // Spawn coupon — DB 쿠폰 우선, 없으면 COUPON_TYPES 폴백
     const spawnCoupon = useCallback(() => {
         const canvas = canvasRef.current;
         if (!canvas) return;
         const g = gameRef.current;
-        const type = COUPON_TYPES[Math.floor(Math.random() * COUPON_TYPES.length)];
+
+        let type: CouponType;
+        if (nearbyCouponsRef.current.length > 0) {
+            // DB 쿠폰을 라운드로빈으로 순환 사용
+            type = nearbyCouponsRef.current[spawnIndexRef.current % nearbyCouponsRef.current.length];
+            spawnIndexRef.current++;
+        } else {
+            // 폴백: 하드코딩 데모 쿠폰
+            type = COUPON_TYPES[Math.floor(Math.random() * COUPON_TYPES.length)];
+        }
+
         const baseSize = Math.min(80, canvas.width * 0.15);
         const speed = 70 + g.level * 18 + Math.random() * 35;
 
@@ -308,6 +445,15 @@ export default function CouponGame3D({ onCouponAcquired, onClose, lang = 'ko' }:
 
         if (!g.wonCoupons.find(c => c.name === coupon.type.name)) {
             g.wonCoupons.push(coupon.type);
+        }
+
+        // DB 쿠폰인 경우 잡은 목록에 추가 (중복 방지: coupon_group_key 기반)
+        if (coupon.type.couponData) {
+            setCaughtDbCoupons(prev => {
+                const key = coupon.type.couponData!.coupon_group_key || coupon.type.couponData!.coupon_id;
+                if (prev.find(c => (c.coupon_group_key || c.coupon_id) === key)) return prev;
+                return [...prev, coupon.type.couponData!];
+            });
         }
 
         soundEngine.collect(g.combo);
@@ -611,6 +757,9 @@ export default function CouponGame3D({ onCouponAcquired, onClose, lang = 'ko' }:
         g.lastTime = performance.now();
 
         setScore(0); setCombo(0); setTimeLeft(60); setLevel(1);
+        setAcquireResult(null);
+        setCaughtDbCoupons([]);
+        spawnIndexRef.current = 0;
         setGameState('playing');
 
         // Timer
@@ -645,7 +794,7 @@ export default function CouponGame3D({ onCouponAcquired, onClose, lang = 'ko' }:
         animRef.current = requestAnimationFrame(gameLoop);
     }, [gameLoop]);
 
-    // End game
+    // End game — DB acquire 시도 + localStorage 폴백
     const endGame = useCallback(() => {
         const g = gameRef.current;
         g.isRunning = false;
@@ -655,33 +804,71 @@ export default function CouponGame3D({ onCouponAcquired, onClose, lang = 'ko' }:
 
         soundEngine.gameOver();
 
-        // Save won coupons to localStorage
-        if (g.wonCoupons.length > 0) {
+        setFinalStats({
+            score: g.score,
+            coupons: g.couponsCollected,
+            maxCombo: g.maxCombo,
+            level: g.level,
+            wonCoupons: [...g.wonCoupons],
+        });
+        setGameState('over');
+    }, []);
+
+    // ===== 게임 종료 시 → 잡은 DB 쿠폰으로 acquire API 호출 =====
+    useEffect(() => {
+        if (gameState !== 'over') return;
+
+        // DB 쿠폰이 잡혔으면 acquire API 호출
+        if (caughtDbCoupons.length > 0) {
+            // 가장 높은 할인의 쿠폰으로 acquire 시도
+            const bestCoupon = [...caughtDbCoupons].sort((a, b) => {
+                if (a.discount_type === 'percent' && b.discount_type === 'amount') return -1;
+                if (a.discount_type === 'amount' && b.discount_type === 'percent') return 1;
+                return b.discount_value - a.discount_value;
+            })[0];
+
+            (async () => {
+                try {
+                    const res = await fetch('/api/coupons/acquire', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            user_id: getUserId(),
+                            coupon_id: bestCoupon.coupon_id,
+                            claimed_via: 'game',
+                        }),
+                    });
+                    const data = await res.json();
+
+                    if (data.success) {
+                        setAcquireResult({
+                            action: data.action,
+                            title: data.data?.title || bestCoupon.title,
+                            discount_value: data.data?.discount_value || bestCoupon.discount_value,
+                            discount_type: data.data?.discount_type || bestCoupon.discount_type,
+                            store_name: data.data?.store_name || bestCoupon.store_name,
+                            coupon_code: data.data?.coupon_code,
+                        });
+
+                        if (data.action === 'ACQUIRED') {
+                            console.log('[Game] 쿠폰 DB 획득 성공:', bestCoupon.title);
+                            onCouponAcquired?.(
+                                bestCoupon.discount_value,
+                                `${bestCoupon.discount_type === 'percent' ? bestCoupon.discount_value + '%' : bestCoupon.discount_value + '원'} - ${bestCoupon.title}`
+                            );
+                        }
+                    }
+                } catch (e) {
+                    console.error('[Game] Acquire API 오류:', e);
+                }
+            })();
+        } else if (finalStats.wonCoupons.length > 0) {
+            // DB 쿠폰 없는 경우 → 데모 쿠폰 localStorage 저장 (폴백)
             try {
                 const existing = JSON.parse(localStorage.getItem('my-coupons') || '[]');
-                const newCoupons = g.wonCoupons.map((coupon) => {
-                    let purchaseUrl, orderUrl, reservationUrl;
-                    if (coupon.name.includes('피자') || coupon.name.includes('도시락') || coupon.name.includes('디저트')) {
-                        orderUrl = 'https://www.baemin.com';
-                    } else if (coupon.name.includes('카페') || coupon.name.includes('커피')) {
-                        orderUrl = 'https://www.yogiyo.co.kr';
-                        purchaseUrl = 'https://www.coupang.com';
-                    } else if (coupon.name.includes('영화')) {
-                        reservationUrl = 'https://www.cgv.co.kr';
-                        purchaseUrl = 'https://www.megabox.co.kr';
-                    } else if (coupon.name.includes('헬스')) {
-                        reservationUrl = 'https://www.naver.com/booking';
-                    } else if (coupon.name.includes('쇼핑')) {
-                        purchaseUrl = 'https://www.coupang.com';
-                    } else if (coupon.name.includes('게임')) {
-                        purchaseUrl = 'https://store.steampowered.com';
-                    } else if (coupon.name.includes('미용')) {
-                        reservationUrl = 'https://www.naver.com/booking';
-                    } else if (coupon.name.includes('세차')) {
-                        reservationUrl = 'https://booking.naver.com';
-                    }
-
-                    return {
+                const newCoupons = finalStats.wonCoupons
+                    .filter(c => !c.couponData)  // DB 쿠폰이 아닌 것만
+                    .map((coupon) => ({
                         id: `game_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
                         title: coupon.name,
                         brand: coupon.name.split(' ')[0],
@@ -694,26 +881,16 @@ export default function CouponGame3D({ onCouponAcquired, onClose, lang = 'ko' }:
                         expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
                         emoji: coupon.emoji,
                         points: coupon.points,
-                        purchaseUrl,
-                        orderUrl,
-                        reservationUrl,
-                    };
-                });
-                localStorage.setItem('my-coupons', JSON.stringify([...existing, ...newCoupons]));
+                    }));
+                if (newCoupons.length > 0) {
+                    localStorage.setItem('my-coupons', JSON.stringify([...existing, ...newCoupons]));
+                }
             } catch (error) {
-                console.error('Failed to save coupons to localStorage:', error);
+                console.error('[Game] localStorage 저장 실패:', error);
             }
         }
-
-        setFinalStats({
-            score: g.score,
-            coupons: g.couponsCollected,
-            maxCombo: g.maxCombo,
-            level: g.level,
-            wonCoupons: [...g.wonCoupons],
-        });
-        setGameState('over');
-    }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [gameState]);
 
     // Toggle pause
     const togglePause = useCallback(() => {
@@ -752,6 +929,25 @@ export default function CouponGame3D({ onCouponAcquired, onClose, lang = 'ko' }:
                 onPointerDown={handlePointerDown}
             />
 
+            {/* ===== LOADING SCREEN ===== */}
+            <AnimatePresence>
+                {gameState === 'loading' && (
+                    <motion.div
+                        className="absolute inset-0 z-50 flex flex-col items-center justify-center bg-background p-6 text-center"
+                        initial={{ opacity: 1 }}
+                        exit={{ opacity: 0 }}
+                    >
+                        <Loader2 className="w-16 h-16 text-purple-500 animate-spin mb-6" />
+                        <p className="text-lg font-semibold text-muted-foreground">
+                            {t('주변 쿠폰을 찾는 중...', 'Finding nearby coupons...')}
+                        </p>
+                        <p className="text-sm text-muted-foreground/60 mt-2">
+                            {t('위치 정보를 사용합니다', 'Using your location')}
+                        </p>
+                    </motion.div>
+                )}
+            </AnimatePresence>
+
             {/* ===== START SCREEN ===== */}
             <AnimatePresence>
                 {gameState === 'start' && (
@@ -784,9 +980,23 @@ export default function CouponGame3D({ onCouponAcquired, onClose, lang = 'ko' }:
                                 {t('쿠폰 게임', 'Coupon Game')}
                             </span>
                         </h1>
-                        <p className="text-muted-foreground mb-8 text-lg sm:text-xl">
+                        <p className="text-muted-foreground mb-4 text-lg sm:text-xl">
                             {t('떨어지는 쿠폰을 터치하여 획득하세요!', 'Touch falling coupons to collect them!')}
                         </p>
+
+                        {/* Nearby coupon count */}
+                        <div className="mb-6">
+                            {nearbyCouponsRef.current.length > 0 ? (
+                                <Badge className="bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border-emerald-500/30 px-4 py-1.5 text-sm">
+                                    <CheckCircle className="w-4 h-4 mr-1.5" />
+                                    {t(`주변 실제 쿠폰 ${nearbyCouponsRef.current.length}개 발견!`, `${nearbyCouponsRef.current.length} real coupons nearby!`)}
+                                </Badge>
+                            ) : (
+                                <Badge variant="secondary" className="px-4 py-1.5 text-sm">
+                                    🎮 {t('데모 모드 (위치/쿠폰 없음)', 'Demo Mode')}
+                                </Badge>
+                            )}
+                        </div>
 
                         <div className="grid grid-cols-3 gap-4 mb-8 max-w-md w-full">
                             {[
@@ -952,6 +1162,46 @@ export default function CouponGame3D({ onCouponAcquired, onClose, lang = 'ko' }:
                             ))}
                         </div>
 
+                        {/* Acquire Result Banner */}
+                        {acquireResult && (
+                            <motion.div
+                                className={`mb-6 w-full max-w-sm rounded-2xl p-4 border ${
+                                    acquireResult.action === 'ACQUIRED'
+                                        ? 'bg-emerald-500/10 border-emerald-500/30'
+                                        : 'bg-amber-500/10 border-amber-500/30'
+                                }`}
+                                initial={{ opacity: 0, y: 20 }}
+                                animate={{ opacity: 1, y: 0 }}
+                                transition={{ delay: 0.7 }}
+                            >
+                                {acquireResult.action === 'ACQUIRED' ? (
+                                    <div className="flex items-center gap-3">
+                                        <CheckCircle className="w-8 h-8 text-emerald-500 shrink-0" />
+                                        <div className="text-left">
+                                            <p className="font-bold text-emerald-600 dark:text-emerald-400">
+                                                {t('쿠폰이 지갑에 저장되었습니다!', 'Coupon saved to wallet!')}
+                                            </p>
+                                            <p className="text-sm text-muted-foreground">
+                                                {acquireResult.title} — {acquireResult.discount_type === 'percent' ? `${acquireResult.discount_value}%` : `${acquireResult.discount_value?.toLocaleString()}원`}
+                                            </p>
+                                        </div>
+                                    </div>
+                                ) : (
+                                    <div className="flex items-center gap-3">
+                                        <AlertCircle className="w-8 h-8 text-amber-500 shrink-0" />
+                                        <div className="text-left">
+                                            <p className="font-bold text-amber-600 dark:text-amber-400">
+                                                {t('이미 같은 상품 쿠폰을 보유중!', 'Already have this coupon!')}
+                                            </p>
+                                            <p className="text-sm text-muted-foreground">
+                                                {t('더 좋은 할인이 적용됩니다', 'Better discount applies')}
+                                            </p>
+                                        </div>
+                                    </div>
+                                )}
+                            </motion.div>
+                        )}
+
                         {/* Won coupons */}
                         {finalStats.wonCoupons.length > 0 && (
                             <motion.div
@@ -988,7 +1238,7 @@ export default function CouponGame3D({ onCouponAcquired, onClose, lang = 'ko' }:
                                 size="lg"
                                 variant="outline"
                                 className="flex-1 rounded-full font-bold text-lg py-4"
-                                onClick={() => onClose?.()}
+                                onClick={() => router.push('/consumer/wallet')}
                             >
                                 <Wallet className="w-5 h-5 mr-2" /> {t('지갑', 'Wallet')}
                             </Button>
