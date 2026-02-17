@@ -1,7 +1,7 @@
 
 'use client';
 
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { motion } from 'framer-motion';
 import {
@@ -33,7 +33,11 @@ import {
   MoreHorizontal, // Added from diff
   Video, // Added from diff
   Image as ImageIcon, // Merged and renamed
-  FileSpreadsheet // Added from diff
+  FileSpreadsheet, // Added from diff
+  Upload,
+  Loader2,
+  CheckCircle,
+  X as XIcon,
 } from 'lucide-react';
 import GoogleSheetsLog from '@/components/merchant/GoogleSheetsLog'; // Added from diff
 import { Button } from '@/components/ui/button';
@@ -65,6 +69,71 @@ export default function MerchantHomePage() {
   const [totalUsed, setTotalUsed] = useState(0);
   const [isDetailOpen, setIsDetailOpen] = useState(false);
   const [selectedDetailCoupon, setSelectedDetailCoupon] = useState<MerchantCoupon | null>(null);
+
+  // 업로드 관련
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [uploading, setUploading] = useState(false);
+  const [uploadResult, setUploadResult] = useState<{ url: string; type: 'IMAGE' | 'VIDEO' } | null>(null);
+  const [dragOver, setDragOver] = useState(false);
+
+  // 파일 업로드 핸들러
+  const handleFileUpload = useCallback(async (file: File) => {
+    if (!selectedDetailCoupon) return;
+    setUploading(true);
+    setUploadResult(null);
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+      formData.append('coupon_id', selectedDetailCoupon.id);
+
+      const res = await fetch('/api/merchant/upload', {
+        method: 'POST',
+        body: formData,
+      });
+      const data = await res.json();
+
+      if (data.success) {
+        setUploadResult({ url: data.url, type: data.media_type });
+        // 로컬 쿠폰 데이터도 업데이트
+        setSelectedDetailCoupon(prev => prev ? {
+          ...prev,
+          imageUrl: data.url,
+          mediaType: data.media_type,
+        } : null);
+        setCoupons(prev => prev.map(c =>
+          c.id === selectedDetailCoupon.id
+            ? { ...c, imageUrl: data.url, mediaType: data.media_type }
+            : c
+        ));
+      } else {
+        alert(data.error || '업로드 실패');
+      }
+    } catch (err) {
+      console.error('Upload error:', err);
+      alert('업로드 중 오류가 발생했습니다.');
+    } finally {
+      setUploading(false);
+    }
+  }, [selectedDetailCoupon]);
+
+  // 드래그 앤 드롭
+  const handleDrop = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    setDragOver(false);
+    const file = e.dataTransfer.files[0];
+    if (file && (file.type.startsWith('image/') || file.type.startsWith('video/'))) {
+      handleFileUpload(file);
+    }
+  }, [handleFileUpload]);
+
+  const handleDragOver = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    setDragOver(true);
+  }, []);
+
+  const handleDragLeave = useCallback(() => {
+    setDragOver(false);
+  }, []);
 
   const getStatusBadge = (status: string) => {
     switch (status) {
@@ -717,29 +786,98 @@ export default function MerchantHomePage() {
 
           {selectedDetailCoupon && (
             <div className="space-y-6">
-              {/* Media Preview */}
-              <div className="aspect-video rounded-xl overflow-hidden bg-black/50 border border-white/10 flex items-center justify-center relative group">
-                {selectedDetailCoupon.imageUrl ? (
-                  selectedDetailCoupon.mediaType === 'VIDEO' || (selectedDetailCoupon.imageUrl.startsWith('blob:') && selectedDetailCoupon.imageUrl.includes('video')) ? (
-                    <video
-                      src={selectedDetailCoupon.imageUrl}
-                      className="w-full h-full object-contain"
-                      controls
-                      autoPlay
-                      playsInline
-                    />
-                  ) : (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img
-                      src={selectedDetailCoupon.imageUrl}
-                      alt={selectedDetailCoupon.name}
-                      className="w-full h-full object-contain"
-                    />
-                  )
+              {/* Media Preview + 업로드 영역 */}
+              <div
+                className={`aspect-video rounded-xl overflow-hidden border-2 border-dashed flex items-center justify-center relative group cursor-pointer transition-all ${
+                  dragOver
+                    ? 'border-purple-400 bg-purple-500/20'
+                    : selectedDetailCoupon.imageUrl
+                      ? 'border-transparent bg-black/50'
+                      : 'border-white/20 bg-black/30 hover:border-purple-400/50 hover:bg-purple-500/10'
+                }`}
+                onDrop={handleDrop}
+                onDragOver={handleDragOver}
+                onDragLeave={handleDragLeave}
+                onClick={() => !uploading && fileInputRef.current?.click()}
+              >
+                {/* 숨겨진 파일 input */}
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/*,video/*"
+                  className="hidden"
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    if (file) handleFileUpload(file);
+                    e.target.value = '';
+                  }}
+                />
+
+                {/* 업로드 중 */}
+                {uploading ? (
+                  <div className="flex flex-col items-center gap-3 text-purple-400">
+                    <Loader2 className="w-10 h-10 animate-spin" />
+                    <span className="text-sm font-bold">업로드 중...</span>
+                  </div>
+                ) : selectedDetailCoupon.imageUrl ? (
+                  <>
+                    {/* 기존 미디어 표시 */}
+                    {selectedDetailCoupon.mediaType === 'VIDEO' || (selectedDetailCoupon.imageUrl.startsWith('blob:') && selectedDetailCoupon.imageUrl.includes('video')) || selectedDetailCoupon.imageUrl.includes('/videos/') ? (
+                      <video
+                        src={selectedDetailCoupon.imageUrl}
+                        className="w-full h-full object-contain"
+                        controls
+                        autoPlay
+                        playsInline
+                        onClick={(e) => e.stopPropagation()}
+                      />
+                    ) : (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img
+                        src={selectedDetailCoupon.imageUrl}
+                        alt={selectedDetailCoupon.name}
+                        className="w-full h-full object-contain"
+                      />
+                    )}
+                    {/* 호버 시 교체 오버레이 */}
+                    <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col items-center justify-center gap-2">
+                      <Upload className="w-8 h-8 text-white" />
+                      <span className="text-white text-sm font-bold">클릭하여 교체</span>
+                      <span className="text-white/60 text-xs">이미지 또는 영상</span>
+                    </div>
+                    {/* 업로드 성공 표시 */}
+                    {uploadResult && (
+                      <div className="absolute top-2 right-2 bg-green-500 text-white px-3 py-1 rounded-full text-xs font-bold flex items-center gap-1 animate-bounce">
+                        <CheckCircle className="w-3 h-3" />
+                        저장됨!
+                      </div>
+                    )}
+                  </>
                 ) : (
-                  <div className="flex flex-col items-center gap-2 text-muted-foreground">
-                    <ImageIcon className="w-12 h-12 opacity-50" />
-                    <span className="text-sm">이미지가 없습니다</span>
+                  /* 업로드 안내 (미디어 없을 때) */
+                  <div className="flex flex-col items-center gap-3 text-center px-4">
+                    <div className="w-16 h-16 rounded-full bg-gradient-to-br from-purple-500/20 to-pink-500/20 flex items-center justify-center">
+                      <Upload className="w-8 h-8 text-purple-400" />
+                    </div>
+                    <div>
+                      <p className="text-white font-bold text-sm">
+                        이미지 또는 영상을 올려주세요
+                      </p>
+                      <p className="text-white/50 text-xs mt-1">
+                        클릭 또는 드래그 앤 드롭
+                      </p>
+                    </div>
+                    <div className="flex gap-2">
+                      <Badge variant="secondary" className="bg-blue-500/20 text-blue-300 text-[10px]">
+                        <ImageIcon className="w-3 h-3 mr-1" />
+                        JPG, PNG, GIF
+                      </Badge>
+                      <Badge variant="secondary" className="bg-pink-500/20 text-pink-300 text-[10px]">
+                        <Video className="w-3 h-3 mr-1" />
+                        MP4, WebM
+                      </Badge>
+                    </div>
+                    <p className="text-white/30 text-[10px]">최대 50MB</p>
                   </div>
                 )}
               </div>
