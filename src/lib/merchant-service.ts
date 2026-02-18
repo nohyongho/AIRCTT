@@ -194,7 +194,19 @@ export const couponService = {
 
   initDemo: (): void => {
     const existing = couponService.getAll();
-    if (existing.length > 0) return;
+    
+    // 만료된 쿠폰 자동 완료 처리
+    const now = new Date();
+    existing.forEach(c => {
+      if (c.status === 'ACTIVE' && c.validUntil && new Date(c.validUntil) < now) {
+        couponService.update(c.id, { status: 'INACTIVE' });
+      }
+    });
+
+    // 활성 쿠폰이 없으면 새 데모 생성 (만료된 것만 있어도 새로 만듦)
+    const refreshed = couponService.getAll();
+    const hasActive = refreshed.some(c => c.status === 'ACTIVE');
+    if (hasActive) return;
 
     const profile = merchantProfileService.get();
     if (!profile) return;
