@@ -1,10 +1,15 @@
 
 import { Coupon, PointHistory } from './consumer-types';
 
+// 비로그인 anon ID 가져오기
+function getAnonId(): string | null {
+  if (typeof window === 'undefined') return null;
+  return localStorage.getItem('airctt_anon_user_id');
+}
+
 export const walletService = {
   // Helper to get headers
   getHeaders: () => {
-    // Check local storage for session
     if (typeof window !== 'undefined') {
       const session = localStorage.getItem('airctt_consumer_session');
       if (session) {
@@ -22,7 +27,12 @@ export const walletService = {
 
   getCoupons: async (): Promise<Coupon[]> => {
     try {
-      const res = await fetch('/api/wallet/my-coupons', {
+      // anon_id 파라미터 추가 (비로그인 유저도 지갑 조회 가능)
+      const anonId = getAnonId();
+      const url = anonId
+        ? `/api/wallet/my-coupons?anon_id=${anonId}`
+        : '/api/wallet/my-coupons';
+      const res = await fetch(url, {
         headers: walletService.getHeaders() as any
       });
       if (!res.ok) throw new Error('Failed to fetch coupons');
@@ -59,67 +69,4 @@ export const walletService = {
       return [];
     }
   },
-
-  useCoupon: async (couponId: string): Promise<boolean> => {
-    try {
-      // Use the API we made earlier
-      const res = await fetch('/api/coupons/use', {
-        method: 'POST',
-        headers: walletService.getHeaders() as any,
-        // Mock Store ID for now, or pass it if available
-        body: JSON.stringify({
-          coupon_issue_id: couponId,
-          store_id: '00000000-0000-0000-0000-000000000000' // Placeholder Mock Store
-        }),
-      });
-      return res.ok;
-    } catch (e) {
-      console.error(e);
-      return false;
-    }
-  },
-
-  addCoupon: async (coupon: Omit<Coupon, 'id' | 'status' | 'expiresAt'>): Promise<void> => {
-    // In Real Flow, this is handled by backend (game finish -> reward claim).
-    // Client-side 'addCoupon' is usually not needed unless it's a dev tool.
-    // We'll leave it as non-op or log it, since the GameWindow now calls APIs directly.
-    console.log('Client-side addCoupon called - deprecated in favor of API flow', coupon);
-  },
-
-  addPoints: async (amount: number, description: string): Promise<void> => {
-    // Similar to addCoupon, this should be server-side.
-    // But for dev testing, we can call the transaction API.
-    try {
-      await fetch('/api/wallet/transaction', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          consumer_id: '00000000-0000-0000-0000-000000000000',
-          type: 'MANUAL_ADD',
-          amount_points: amount
-        })
-      });
-    } catch (e) {
-      console.error(e);
-    }
-  },
-
-  usePoints: async (amount: number, description: string): Promise<boolean> => {
-    try {
-      const res = await fetch('/api/wallet/transaction', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          consumer_id: '00000000-0000-0000-0000-000000000000',
-          type: 'MANUAL_USE',
-          amount_points: -amount // Negative for usage
-        })
-      });
-      return res.ok;
-    } catch (e) {
-      console.error(e);
-      return false;
-    }
-  },
 };
-
