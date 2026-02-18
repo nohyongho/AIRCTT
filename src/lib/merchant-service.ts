@@ -206,9 +206,9 @@ export const couponService = {
       discountType: 'PERCENTAGE',
       discountValue: 10,
       minPurchaseAmount: 50000,
-      imageUrl: 'https://images.unsplash.com/photo-1568901346375-23c9450f58cd?w=200',
+      imageUrl: 'https://images.unsplash.com/photo-1568901346375-23c9450f58cd?w=400&q=80',
       validFrom: '2025-01-01',
-      validUntil: '2025-12-31',
+      validUntil: '2026-12-31',
       totalQuantity: 100,
       status: 'ACTIVE',
     });

@@ -118,7 +118,12 @@ export default function MerchantHomePage() {
             ? { ...c, imageUrl: publicUrl, mediaType: isVideo ? 'VIDEO' : 'IMAGE' }
             : c
         ));
-        console.log('✅ 업로드 성공:', publicUrl);
+        // ✅ localStorage에도 영구 저장!
+        couponService.update(selectedDetailCoupon.id, {
+          imageUrl: publicUrl,
+          mediaType: isVideo ? 'VIDEO' : 'IMAGE',
+        });
+        console.log('✅ 업로드 성공 + localStorage 저장:', publicUrl);
       } else {
         const errText = await uploadRes.text();
         console.error('Storage 업로드 실패:', errText);
@@ -458,8 +463,13 @@ export default function MerchantHomePage() {
                               setCoupons(prev => prev.map(c =>
                                 c.id === coupon.id ? { ...c, imageUrl: publicUrl, mediaType: isVideo ? 'VIDEO' : 'IMAGE' } : c
                               ));
+                              // ✅ localStorage에도 영구 저장!
+                              couponService.update(coupon.id, {
+                                imageUrl: publicUrl,
+                                mediaType: isVideo ? 'VIDEO' : 'IMAGE',
+                              });
                               URL.revokeObjectURL(blobUrl);
-                              console.log('✅ Supabase Storage 업로드 성공:', publicUrl);
+                              console.log('✅ Supabase Storage 업로드 성공 + localStorage 저장:', publicUrl);
                             } else {
                               console.warn('⚠️ Storage 업로드 실패, 로컬 미리보기 유지:', await uploadRes.text());
                             }
@@ -891,7 +901,7 @@ export default function MerchantHomePage() {
               {/* Media Preview */}
               <div className="aspect-video rounded-xl overflow-hidden bg-black/50 border border-white/10 flex items-center justify-center relative group">
                 {selectedDetailCoupon.imageUrl ? (
-                  selectedDetailCoupon.mediaType === 'VIDEO' || (selectedDetailCoupon.imageUrl.startsWith('blob:') && selectedDetailCoupon.imageUrl.includes('video')) ? (
+                  selectedDetailCoupon.mediaType === 'VIDEO' || selectedDetailCoupon.imageUrl.includes('/videos/') ? (
                     <video
                       src={selectedDetailCoupon.imageUrl}
                       className="w-full h-full object-contain"
