@@ -360,43 +360,53 @@ export default function CouponGame3D({ onCouponAcquired, onClose, lang = 'ko' }:
 
     // ===== 시작 시 nearby API로 실제 쿠폰 가져오기 =====
     useEffect(() => {
+        // DB 쿠폰 로드 공통 함수
+        const loadCouponsFromAPI = async (lat: number, lng: number) => {
+            const res = await fetch(`/api/coupons/nearby?lat=${lat}&lng=${lng}&radius=100&limit=30`);
+            const result = await res.json();
+            if (result.success && result.data?.length > 0) {
+                const dbTypes: CouponType[] = result.data.map((c: any, idx: number) => {
+                    const gameCoupon: GameCouponData = {
+                        coupon_id: c.coupon_id,
+                        store_id: c.store_id,
+                        store_name: c.store_name || '',
+                        coupon_group_key: c.coupon_group_key,
+                        display_label: `${c.discount_type === 'percent' ? c.discount_value + '%' : c.discount_value + '원'} / ${c.product_sku || c.title}`,
+                        asset_type: c.asset_type || 'IMAGE_2D',
+                        asset_url: c.asset_url,
+                        discount_type: c.discount_type,
+                        discount_value: c.discount_value,
+                        title: c.title,
+                    };
+                    return dbCouponToType(gameCoupon, idx);
+                });
+                nearbyCouponsRef.current = dbTypes;
+                console.log(`[Game] ${dbTypes.length}개 DB 쿠폰 로드됨`);
+                return true;
+            }
+            return false;
+        };
+
         const fetchNearbyCoupons = async () => {
             try {
+                // 1차: 실제 위치로 시도
                 const pos = await new Promise<GeolocationPosition>((resolve, reject) => {
                     navigator.geolocation.getCurrentPosition(resolve, reject, {
-                        enableHighAccuracy: true,
-                        timeout: 10000,
-                        maximumAge: 60000,
+                        enableHighAccuracy: false,
+                        timeout: 5000,
+                        maximumAge: 300000,
                     });
                 });
-                const lat = pos.coords.latitude;
-                const lng = pos.coords.longitude;
-                const res = await fetch(`/api/coupons/nearby?lat=${lat}&lng=${lng}&radius=100&limit=30`);
-                const result = await res.json();
-
-                if (result.success && result.data?.length > 0) {
-                    const dbTypes: CouponType[] = result.data.map((c: any, idx: number) => {
-                        const gameCoupon: GameCouponData = {
-                            coupon_id: c.coupon_id,
-                            store_id: c.store_id,
-                            store_name: c.store_name || '',
-                            coupon_group_key: c.coupon_group_key,
-                            display_label: `${c.discount_type === 'percent' ? c.discount_value + '%' : c.discount_value + '원'} / ${c.product_sku || c.title}`,
-                            asset_type: c.asset_type || 'IMAGE_2D',
-                            asset_url: c.asset_url,
-                            discount_type: c.discount_type,
-                            discount_value: c.discount_value,
-                            title: c.title,
-                        };
-                        return dbCouponToType(gameCoupon, idx);
-                    });
-                    nearbyCouponsRef.current = dbTypes;
-                    console.log(`[Game] ${dbTypes.length}개 실제 쿠폰 로드됨`);
-                } else {
-                    console.log('[Game] 주변 쿠폰 없음 → 데모 모드');
+                const loaded = await loadCouponsFromAPI(pos.coords.latitude, pos.coords.longitude);
+                if (!loaded) {
+                    // 위치는 됐지만 주변 쿠폰 없음 → 서울 기본좌표로 재시도
+                    console.log('[Game] 주변 쿠폰 없음 → 서울 기본좌표로 재시도');
+                    await loadCouponsFromAPI(37.5665, 126.978);
                 }
             } catch (e) {
-                console.warn('[Game] 위치/API 오류 → 데모 모드:', e);
+                // 위치 권한 없음 → 서울 기본좌표로 DB 쿠폰 로드
+                console.warn('[Game] 위치 권한 없음 → 서울 기본좌표로 DB 쿠폰 로드');
+                await loadCouponsFromAPI(37.5665, 126.978);
             } finally {
                 setGameState('start');
             }
