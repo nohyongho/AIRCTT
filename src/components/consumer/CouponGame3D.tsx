@@ -814,52 +814,71 @@ export default function CouponGame3D({ onCouponAcquired, onClose, lang = 'ko' }:
         setGameState('over');
     }, []);
 
-    // ===== 게임 종료 시 → 잡은 DB 쿠폰으로 acquire API 호출 =====
+    // ===== 게임 종료 시 → 잡은 DB 쿠폰 전부 acquire API 호출 =====
     useEffect(() => {
         if (gameState !== 'over') return;
 
-        // DB 쿠폰이 잡혔으면 acquire API 호출
+        // DB 쿠폰이 잡혔으면 acquire API 호출 (전부!)
         if (caughtDbCoupons.length > 0) {
-            // 가장 높은 할인의 쿠폰으로 acquire 시도
-            const bestCoupon = [...caughtDbCoupons].sort((a, b) => {
-                if (a.discount_type === 'percent' && b.discount_type === 'amount') return -1;
-                if (a.discount_type === 'amount' && b.discount_type === 'percent') return 1;
-                return b.discount_value - a.discount_value;
-            })[0];
-
             (async () => {
-                try {
-                    const res = await fetch('/api/coupons/acquire', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({
-                            user_id: getUserId(),
-                            coupon_id: bestCoupon.coupon_id,
-                            claimed_via: 'game',
-                        }),
-                    });
-                    const data = await res.json();
+                let lastAcquiredResult: typeof acquireResult = null;
+                let acquiredCount = 0;
 
-                    if (data.success) {
-                        setAcquireResult({
-                            action: data.action,
-                            title: data.data?.title || bestCoupon.title,
-                            discount_value: data.data?.discount_value || bestCoupon.discount_value,
-                            discount_type: data.data?.discount_type || bestCoupon.discount_type,
-                            store_name: data.data?.store_name || bestCoupon.store_name,
-                            coupon_code: data.data?.coupon_code,
+                // 잡은 쿠폰 전부 acquire (중복은 서버에서 MOTION_ONLY 처리)
+                for (const coupon of caughtDbCoupons) {
+                    try {
+                        const res = await fetch('/api/coupons/acquire', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                user_id: getUserId(),
+                                coupon_id: coupon.coupon_id,
+                                claimed_via: 'game',
+                            }),
                         });
+                        const data = await res.json();
 
-                        if (data.action === 'ACQUIRED') {
-                            console.log('[Game] 쿠폰 DB 획득 성공:', bestCoupon.title);
-                            onCouponAcquired?.(
-                                bestCoupon.discount_value,
-                                `${bestCoupon.discount_type === 'percent' ? bestCoupon.discount_value + '%' : bestCoupon.discount_value + '원'} - ${bestCoupon.title}`
-                            );
+                        if (data.success) {
+                            if (data.action === 'ACQUIRED') {
+                                acquiredCount++;
+                                lastAcquiredResult = {
+                                    action: data.action,
+                                    title: data.data?.title || coupon.title,
+                                    discount_value: data.data?.discount_value || coupon.discount_value,
+                                    discount_type: data.data?.discount_type || coupon.discount_type,
+                                    store_name: data.data?.store_name || coupon.store_name,
+                                    coupon_code: data.data?.coupon_code,
+                                };
+                                console.log('[Game] 쿠폰 DB 획득 성공:', coupon.title);
+                                onCouponAcquired?.(
+                                    coupon.discount_value,
+                                    `${coupon.discount_type === 'percent' ? coupon.discount_value + '%' : coupon.discount_value + '원'} - ${coupon.title}`
+                                );
+                            }
                         }
+                    } catch (e) {
+                        console.error('[Game] Acquire API 오류:', coupon.title, e);
                     }
-                } catch (e) {
-                    console.error('[Game] Acquire API 오류:', e);
+                }
+
+                // 마지막 획득 쿠폰 결과 표시 (획득된 게 있으면)
+                if (lastAcquiredResult) {
+                    setAcquireResult({
+                        ...lastAcquiredResult,
+                        // 여러 개 획득 시 타이틀에 개수 표시
+                        title: acquiredCount > 1
+                            ? `${acquiredCount}개 쿠폰 획득! 🎉 (${lastAcquiredResult.title} 외)`
+                            : lastAcquiredResult.title,
+                    });
+                } else {
+                    // 전부 MOTION_ONLY (중복) 인 경우
+                    setAcquireResult({
+                        action: 'MOTION_ONLY',
+                        title: caughtDbCoupons[0]?.title || '쿠폰',
+                        discount_value: caughtDbCoupons[0]?.discount_value || 0,
+                        discount_type: caughtDbCoupons[0]?.discount_type || 'percent',
+                        store_name: caughtDbCoupons[0]?.store_name || '',
+                    });
                 }
             })();
         } else if (finalStats.wonCoupons.length > 0) {
