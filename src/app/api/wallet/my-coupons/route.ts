@@ -1,6 +1,71 @@
-
 import { NextResponse } from 'next/server';
 import { createPostgrestClient } from '@/lib/postgrest';
+
+export async function GET(request: Request) {
+    try {
+        const { searchParams } = new URL(request.url);
+        const anonId = searchParams.get('anon_id');
+
+        const authHeader = request.headers.get('Authorization');
+        const token = authHeader?.replace('Bearer ', '');
+        const client = createPostgrestClient(token);
+
+        let consumerKey = '00000000-0000-0000-0000-000000000000'; // Default Mock
+
+        if (token) {
+            const { data: userData } = await client.from('users').select('id').single();
+            if (userData) {
+                consumerKey = userData.id;
+            }
+        } else if (anonId) {
+            // 비로그인 익명 UUID: 게임에서 저장한 쿠폰 조회
+            consumerKey = anonId;
+        }
+
+        // 로그인 유저: 본인 쿠폰만 / 비로그인: anon ID 쿠폰만
+        const query = client
+            .from('coupon_issues')
+            .select(`
+        id,
+        is_used,
+        issued_at,
+        coupons!inner (
+          title,
+          description,
+          discount_value,
+          valid_to,
+          merchants ( name )
+        )
+      `)
+            .order('issued_at', { ascending: false });
+
+        // mock ID(00000000...)가 아닐 때만 실제 ID로 필터
+        const { data, error } = consumerKey !== '00000000-0000-0000-0000-000000000000'
+            ? await query.eq('user_id', consumerKey)
+            : await query.eq('user_id', '00000000-0000-0000-0000-000000000000');
+
+        if (error) {
+            console.error('Wallet Query Error:', error);
+            return NextResponse.json({ error: error.message }, { status: 500 });
+        }
+
+        const formatted = (data || []).map((issue: any) => ({
+            id: issue.id,
+            title: issue.coupons.title,
+            description: issue.coupons.description,
+            brand: issue.coupons.merchants?.name || 'Unknown Brand',
+            status: !issue.is_used ? 'available' : 'used',
+            expiresAt: issue.coupons.valid_to,
+            imageUrl: 'https://images.unsplash.com/photo-1607082348824-0a96f2a4b9da?w=200',
+            discountRate: issue.coupons.discount_value,
+        }));
+
+        return NextResponse.json(formatted);
+
+    } catch (error: any) {
+        return NextResponse.json({ error: error.message }, { status: 500 });
+    }
+}
 
 export async function GET(request: Request) {
     try {

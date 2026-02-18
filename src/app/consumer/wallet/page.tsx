@@ -580,13 +580,21 @@ export default function WalletPage() {
 }
 
 function getSenderId(): string {
-  if (typeof window === 'undefined') return 'anonymous';
+  if (typeof window === 'undefined') return '00000000-0000-0000-0000-000000000000';
   try {
     const session = localStorage.getItem('airctt_consumer_session');
     if (session) {
       const parsed = JSON.parse(session);
-      return parsed.user_id || parsed.consumer_id || 'anonymous';
+      const id = parsed.user_id || parsed.consumer_id;
+      if (id && id !== 'anonymous') return id;
     }
+    // 비로그인: 게임과 동일한 UUID anon ID 재사용
+    let anonId = localStorage.getItem('airctt_anon_user_id');
+    if (!anonId) {
+      anonId = crypto.randomUUID();
+      localStorage.setItem('airctt_anon_user_id', anonId);
+    }
+    return anonId;
   } catch { /* ignore */ }
-  return 'anonymous';
+  return '00000000-0000-0000-0000-000000000000';
 }

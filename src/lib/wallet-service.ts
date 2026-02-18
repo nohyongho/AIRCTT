@@ -22,7 +22,15 @@ export const walletService = {
 
   getCoupons: async (): Promise<Coupon[]> => {
     try {
-      const res = await fetch('/api/wallet/my-coupons', {
+      // 비로그인 익명 UUID도 함께 전달 (게임과 동일한 ID 사용)
+      let anonId = '';
+      if (typeof window !== 'undefined') {
+        anonId = localStorage.getItem('airctt_anon_user_id') || '';
+      }
+      const url = anonId
+        ? `/api/wallet/my-coupons?anon_id=${anonId}`
+        : '/api/wallet/my-coupons';
+      const res = await fetch(url, {
         headers: walletService.getHeaders() as any
       });
       if (!res.ok) throw new Error('Failed to fetch coupons');
