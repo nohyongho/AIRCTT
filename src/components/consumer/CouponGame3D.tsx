@@ -363,7 +363,7 @@ export default function CouponGame3D({ onCouponAcquired, onClose, lang = 'ko' }:
                 });
                 const lat = pos.coords.latitude;
                 const lng = pos.coords.longitude;
-                const res = await fetch(`/api/coupons/nearby?lat=${lat}&lng=${lng}&radius=5&limit=30`);
+                const res = await fetch(`/api/coupons/nearby?lat=${lat}&lng=${lng}&radius=100&limit=30`);
                 const result = await res.json();
 
                 if (result.success && result.data?.length > 0) {
