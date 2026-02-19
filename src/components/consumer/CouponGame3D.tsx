@@ -362,20 +362,20 @@ export default function CouponGame3D({ onCouponAcquired, onClose, lang = 'ko' }:
     useEffect(() => {
         // DB 쿠폰 로드 공통 함수
         const loadCouponsFromAPI = async (lat: number, lng: number) => {
-            const res = await fetch(`/api/coupons/nearby?lat=${lat}&lng=${lng}&radius=100&limit=30`);
+            const res = await fetch(`/api/game/spawn-coupons?limit=10&lat=${lat}&lng=${lng}&radius=100&limit=30`);
             const result = await res.json();
-            if (result.success && result.data?.length > 0) {
-                const dbTypes: CouponType[] = result.data.map((c: any, idx: number) => {
+            if (result.success && result.coupons?.length > 0) {
+                const dbTypes: CouponType[] = result.coupons.map((c: any, idx: number) => {
                     const gameCoupon: GameCouponData = {
-                        coupon_id: c.coupon_id,
+                        coupon_id: c.id,
                         store_id: c.store_id,
                         store_name: c.store_name || '',
                         coupon_group_key: c.coupon_group_key,
-                        display_label: `${c.discount_type === 'percent' ? c.discount_value + '%' : c.discount_value + '원'} / ${c.product_sku || c.title}`,
-                        asset_type: c.asset_type || 'IMAGE_2D',
-                        asset_url: c.asset_url,
-                        discount_type: c.discount_type,
-                        discount_value: c.discount_value,
+                        display_label: `${c.discountType || c.discount_type === 'percent' ? c.discountValue || c.discount_value + '%' : c.discountValue || c.discount_value + '원'} / ${c.product_sku || c.title}`,
+                        asset_type: c.assetType || c.asset_type || 'IMAGE_2D',
+                        asset_url: c.assetUrl || c.asset_url,
+                        discount_type: c.discountType || c.discount_type,
+                        discount_value: c.discountValue || c.discount_value,
                         title: c.title,
                     };
                     return dbCouponToType(gameCoupon, idx);
@@ -845,7 +845,7 @@ export default function CouponGame3D({ onCouponAcquired, onClose, lang = 'ko' }:
                 // 잡은 쿠폰 전부 acquire (중복은 서버에서 MOTION_ONLY 처리)
                 for (const coupon of caughtDbCoupons) {
                     try {
-                        const res = await fetch('/api/coupons/acquire', {
+                        const res = await fetch('/api/game/spawn-coupons', {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
                             body: JSON.stringify({
@@ -857,15 +857,15 @@ export default function CouponGame3D({ onCouponAcquired, onClose, lang = 'ko' }:
                         const data = await res.json();
 
                         if (data.success) {
-                            if (data.action === 'ACQUIRED') {
+                            if (data.success) {
                                 acquiredCount++;
                                 lastAcquiredResult = {
                                     action: data.action,
-                                    title: data.data?.title || coupon.title,
-                                    discount_value: data.data?.discount_value || coupon.discount_value,
-                                    discount_type: data.data?.discount_type || coupon.discount_type,
-                                    store_name: data.data?.store_name || coupon.store_name,
-                                    coupon_code: data.data?.coupon_code,
+                                    title: data.issue?.title || coupon.title,
+                                    discount_value: data.issue?.discount_value || coupon.discount_value,
+                                    discount_type: data.issue?.discount_type || coupon.discount_type,
+                                    store_name: data.issue?.store_name || coupon.store_name,
+                                    coupon_code: data.issue?.coupon_code,
                                 };
                                 console.log('[Game] 쿠폰 DB 획득 성공:', coupon.title);
                                 onCouponAcquired?.(
