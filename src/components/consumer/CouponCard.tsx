@@ -25,16 +25,14 @@ export default function CouponCard({
 }: CouponCardProps) {
   const { language } = useI18n();
 
-  const statusColors: Record<string, string> = {
+  const statusColors = {
     available: 'bg-green-500',
-    active: 'bg-green-500',
     used: 'bg-gray-500',
     expired: 'bg-red-500',
   };
 
-  const statusLabels: Record<string, string> = {
+  const statusLabels = {
     available: language === 'ko' ? '사용가능' : 'Available',
-    active: language === 'ko' ? '사용가능' : 'Available',
     used: language === 'ko' ? '사용완료' : 'Used',
     expired: language === 'ko' ? '기간만료' : 'Expired',
   };
