@@ -158,8 +158,7 @@ function getUserId(): string {
         const session = localStorage.getItem('airctt_consumer_session');
         if (session) {
             const parsed = JSON.parse(session);
-            // ✅ session.user.id (Supabase 구조) 우선 체크
-            const id = parsed.user?.id || parsed.user_id || parsed.consumer_id;
+            const id = parsed.user_id || parsed.consumer_id;
             if (id && id !== 'anonymous') return id;
         }
         // 비로그인: UUID 형식의 anon ID 재사용 (지갑과 공유)
