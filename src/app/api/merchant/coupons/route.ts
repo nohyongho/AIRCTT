@@ -1,10 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
-
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-);
+import { createPostgrestClient } from '@/lib/postgrest';
 
 // POST: 사업자 쿠폰 등록 (승인 대기 상태로 저장)
 export async function POST(req: NextRequest) {
@@ -25,7 +20,8 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const { data, error } = await supabase
+    const postgrest = createPostgrestClient();
+    const { data, error } = await postgrest
       .from('coupons')
       .insert({
         merchant_id: merchant_id || null,
@@ -73,7 +69,8 @@ export async function GET(req: NextRequest) {
     const merchant_id = searchParams.get('merchant_id');
     const store_id = searchParams.get('store_id');
 
-    let query = supabase
+    const postgrest = createPostgrestClient();
+    let query = postgrest
       .from('coupons')
       .select('*')
       .order('created_at', { ascending: false });
