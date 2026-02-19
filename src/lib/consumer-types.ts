@@ -14,13 +14,10 @@ export interface Coupon {
   title: string;
   description: string;
   brand: string;
-  status: 'available' | 'used' | 'expired' | 'active';
+  status: 'available' | 'used' | 'expired';
   expiresAt: string;
   imageUrl?: string;
   discountRate?: number;
-  discountType?: string;
-  couponCode?: string;
-  isDemo?: boolean;
   issuerInfo?: {
     name: string;
     brand: string;
