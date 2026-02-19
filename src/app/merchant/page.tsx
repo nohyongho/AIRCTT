@@ -488,9 +488,9 @@ export default function MerchantHomePage() {
           {adminBanners.length > 0 && (
             <div className="mb-4 rounded-xl overflow-hidden relative">
               {adminBanners[0].type === 'video' && adminBanners[0].file_url ? (
-                <video src={adminBanners[0].file_url} autoPlay muted loop playsInline className="w-full rounded-xl" style={{maxHeight:'200px',objectFit:'cover'}} />
+                <video src={adminBanners[0].file_url} autoPlay muted loop playsInline className="w-full rounded-xl" style={{maxHeight:'200px',objectFit:'cover' as const}} />
               ) : adminBanners[0].file_url ? (
-                <img src={adminBanners[0].file_url} alt={adminBanners[0].title||''} className="w-full rounded-xl" style={{maxHeight:'200px',objectFit:'cover'}} />
+                <img src={adminBanners[0].file_url} alt={adminBanners[0].title||''} className="w-full rounded-xl" style={{maxHeight:'200px',objectFit:'cover' as const}} />
               ) : null}
               <span className="absolute top-2 right-2 bg-red-500 text-white text-xs px-2 py-1 rounded-full font-bold">LIVE</span>
             </div>
