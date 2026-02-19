@@ -70,6 +70,10 @@ export default function MerchantHomePage() {
   const [isDetailOpen, setIsDetailOpen] = useState(false);
   const [selectedDetailCoupon, setSelectedDetailCoupon] = useState<MerchantCoupon | null>(null);
 
+  // 관리자 배너 (오빠가 올리면 전체 사장님이 봄)
+  const [adminBanners, setAdminBanners] = useState<{id:string;title:string|null;type:string;file_url:string|null;description:string|null}[]>([]);
+  const [isAdminUser, setIsAdminUser] = useState(false);
+
   // 업로드 관련
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
@@ -205,6 +209,46 @@ export default function MerchantHomePage() {
     return '무료 제공';
   };
 
+  // 관리자 배너 로드 (Supabase DB에서)
+  const loadAdminBanners = useCallback(async () => {
+    try {
+      const res = await fetch(
+        `https://nlsiwrwiyozpiofrmzxa.supabase.co/rest/v1/merchant_banners?is_active=eq.true&order=created_at.desc`,
+        { headers: { 'apikey': SUPABASE_KEY, 'Authorization': `Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im5sc2l3cndpeW96cGlvZnJtenhhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjExNTc4NzcsImV4cCI6MjA3NjczMzg3N30.hurd7QNUJ-JVppETyDnCwU97F1Z3jkWszYRM9NhSUAg` } }
+      );
+      if (res.ok) {
+        const data = await res.json();
+        setAdminBanners(data);
+      }
+    } catch(e) { console.error('배너 로드 실패:', e); }
+  }, []);
+
+  // 관리자 배너 업로드 (오빠만!)
+  const uploadAdminBanner = useCallback(async (file: File) => {
+    setUploading(true);
+    try {
+      const isVideo = file.type.startsWith('video/');
+      const ext = file.name.split('.').pop()?.toLowerCase() || (isVideo ? 'mp4' : 'jpg');
+      const filePath = `merchant/admin/${Date.now()}_${Math.random().toString(36).substring(2,8)}.${ext}`;
+      const uploadRes = await fetch(
+        `https://nlsiwrwiyozpiofrmzxa.supabase.co/storage/v1/object/coupon-media/${filePath}`,
+        { method:'POST', headers:{'Authorization':`Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im5sc2l3cndpeW96cGlvZnJtenhhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjExNTc4NzcsImV4cCI6MjA3NjczMzg3N30.hurd7QNUJ-JVppETyDnCwU97F1Z3jkWszYRM9NhSUAg`,'apikey':SUPABASE_KEY,'Content-Type':file.type,'x-upsert':'true'}, body:file }
+      );
+      if (uploadRes.ok) {
+        const publicUrl = `https://nlsiwrwiyozpiofrmzxa.supabase.co/storage/v1/object/public/coupon-media/${filePath}`;
+        // DB에 저장
+        await fetch(`https://nlsiwrwiyozpiofrmzxa.supabase.co/rest/v1/merchant_banners`, {
+          method:'POST',
+          headers:{'apikey':SUPABASE_KEY,'Authorization':`Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im5sc2l3cndpeW96cGlvZnJtenhhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjExNTc4NzcsImV4cCI6MjA3NjczMzg3N30.hurd7QNUJ-JVppETyDnCwU97F1Z3jkWszYRM9NhSUAg`,'Content-Type':'application/json','Prefer':'return=minimal'},
+          body: JSON.stringify({ type: isVideo?'video':'image', file_url: publicUrl, is_active: true, created_by: 'zeus1404@gmail.com' })
+        });
+        await loadAdminBanners();
+        alert('✅ 배너가 전체 사장님께 공개됐어요!');
+      }
+    } catch(e) { console.error('배너 업로드 실패:', e); }
+    finally { setUploading(false); }
+  }, [loadAdminBanners]);
+
   const loadData = useCallback(() => {
     setProfile(merchantProfileService.get());
     setOutlets(outletService.getAll());
@@ -229,7 +273,17 @@ export default function MerchantHomePage() {
   useEffect(() => {
     initMerchantDemo();
     loadData();
-  }, [loadData]);
+    loadAdminBanners();
+    // 관리자 여부 확인
+    try {
+      const session = localStorage.getItem('airctt_merchant_session') || localStorage.getItem('airctt_consumer_session');
+      if (session) {
+        const parsed = JSON.parse(session);
+        const email = parsed.user?.email || parsed.email;
+        if (email === 'zeus1404@gmail.com') setIsAdminUser(true);
+      }
+    } catch(e) {}
+  }, [loadData, loadAdminBanners]);
 
   const stats = [
     {
@@ -429,6 +483,30 @@ export default function MerchantHomePage() {
               전체보기
             </Button>
           </div>
+
+          {/* ✅ 오빠가 올린 전체 공개 배너 */}
+          {adminBanners.length > 0 && (
+            <div className="mb-4 rounded-xl overflow-hidden relative">
+              {adminBanners[0].type === 'video' && adminBanners[0].file_url ? (
+                <video src={adminBanners[0].file_url} autoPlay muted loop playsInline className="w-full rounded-xl" style={{maxHeight:'200px',objectFit:'cover'}} />
+              ) : adminBanners[0].file_url ? (
+                <img src={adminBanners[0].file_url} alt={adminBanners[0].title||''} className="w-full rounded-xl" style={{maxHeight:'200px',objectFit:'cover'}} />
+              ) : null}
+              <span className="absolute top-2 right-2 bg-red-500 text-white text-xs px-2 py-1 rounded-full font-bold">LIVE</span>
+            </div>
+          )}
+          {/* 오빠만 보이는 배너 업로드 버튼 */}
+          {isAdminUser && (
+            <div className="mb-4">
+              <label className="cursor-pointer flex items-center gap-2 text-xs text-white/60 hover:text-white/90 border border-white/20 rounded-lg px-3 py-2 w-fit">
+                <Upload className="w-4 h-4" />
+                {uploading ? '업로드 중...' : '📺 전체 공개 배너 업로드 (관리자 전용)'}
+                <input type="file" accept="video/*,image/*" className="hidden" onChange={async (e) => {
+                  const f = e.target.files?.[0]; if(f) await uploadAdminBanner(f);
+                }} />
+              </label>
+            </div>
+          )}
 
           <div className="flex gap-4 overflow-x-auto pb-4 scrollbar-hide -mx-4 px-4">
             {coupons.filter(c => c.status === 'ACTIVE').length > 0 ? (
