@@ -54,7 +54,7 @@ export async function GET(request: Request) {
             title: issue.coupons.title,
             description: issue.coupons.description,
             brand: issue.coupons.merchants?.name || 'Unknown Brand',
-            status: (issue.status === 'active' ? 'available' : issue.status) || (!issue.is_used ? 'available' : 'used'),
+            status: issue.status || (!issue.is_used ? 'active' : 'used'),
             expiresAt: issue.expires_at || issue.coupons.valid_to,
             couponCode: issue.code,
             imageUrl: 'https://images.unsplash.com/photo-1607082348824-0a96f2a4b9da?w=200',
