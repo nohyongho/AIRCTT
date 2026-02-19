@@ -1,12 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
+import { createPostgrestClient } from '@/lib/postgrest';
 
 const ADMIN_EMAIL = 'zeus1404@gmail.com';
-
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-);
 
 // GET: 승인 대기 쿠폰 목록 조회
 export async function GET(req: NextRequest) {
@@ -14,7 +9,8 @@ export async function GET(req: NextRequest) {
     const { searchParams } = new URL(req.url);
     const status = searchParams.get('status') || 'PENDING_APPROVAL';
 
-    const { data, error } = await supabase
+    const postgrest = createPostgrestClient();
+    const { data, error } = await postgrest
       .from('coupons')
       .select('*')
       .eq('approval_status', status)
@@ -60,7 +56,8 @@ export async function PATCH(req: NextRequest) {
     const newStatus = action === 'approve' ? 'APPROVED' : 'REJECTED';
     const isActive = action === 'approve';
 
-    const { data, error } = await supabase
+    const postgrest = createPostgrestClient();
+    const { data, error } = await postgrest
       .from('coupons')
       .update({
         approval_status: newStatus,
