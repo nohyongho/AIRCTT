@@ -144,6 +144,32 @@ export default function WalletPage() {
 
     return coupons.filter(coupon => {
       if (!coupon.distance || coupon.status !== 'available') return false;
+
+          // 쿠폰 사용하기 핸들러 (사업자 사이트 이동)
+              const handleRedeemCoupon = async (couponId: string) => {
+                    try {
+                            const res = await fetch('/api/coupons/redeem', {
+                                      method: 'POST',
+                                                headers: { 'Content-Type': 'application/json' },
+                                                          body: JSON.stringify({ coupon_id: couponId }),
+                                                                  });
+                                                                          const data = await res.json();
+                                                                                  if (data.success && data.redirect_url) {
+                                                                                            // 쿠폰 상태 업데이트
+                                                                                                      setCoupons(prev => prev.map(c => c.id === couponId ? { ...c, status: 'used' } : c));
+                                                                                                                // 사업자 사이트로 이동
+                                                                                                                          window.open(data.redirect_url, '_blank');
+                                                                                                                                  } else if (data.success) {
+                                                                                                                                            setCoupons(prev => prev.map(c => c.id === couponId ? { ...c, status: 'used' } : c));
+                                                                                                                                                      alert(data.message || '쿠폰이 사용되었습니다!');
+                                                                                                                                                              } else {
+                                                                                                                                                                        alert(data.error || '쿠폰 사용에 실패했습니다.');
+                                                                                                                                                                                }
+                                                                                                                                                                                      } catch (e) {
+                                                                                                                                                                                              console.error('쿠폰 사용 에러:', e);
+                                                                                                                                                                                                      alert('쿠폰 사용 중 오류가 발생했습니다.');
+                                                                                                                                                                                                            }
+                                                                                                                                                                                                                };
       const dist = parseFloat(coupon.distance.replace(/[^0-9.]/g, ''));
       return dist <= 3;
     });
@@ -398,7 +424,7 @@ export default function WalletPage() {
 
                     {/* 액션 버튼들 */}
                     <div className="flex flex-col gap-1 flex-shrink-0">
-                      {/* 선물하기 버튼 */}
+                      {/* 쿠폰 사용하기 버튼 */}
                       {coupon.status === 'available' && (
                         <Button
                           variant="outline"
