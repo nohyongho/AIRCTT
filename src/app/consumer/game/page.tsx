@@ -19,7 +19,12 @@ export default function GamePage() {
     }, []);
 
     const handleCouponAcquired = (amount: number, name: string) => {
-        // Game has its own UI for this
+        toast.success(`${name} 쿠폰을 획득했어요! 지갑에서 확인하세요`, {
+            action: {
+                label: '지갑 보기',
+                onClick: () => router.push('/consumer/wallet'),
+            },
+        });
     };
 
     const handleClose = () => {

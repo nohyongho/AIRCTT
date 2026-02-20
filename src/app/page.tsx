@@ -68,6 +68,17 @@ export default function LandingPage() {
       href: '/consumer/wallet',
       features: ['포인트 충전', '쿠폰 거래', '결제 내역'],
     },
+    {
+      id: 'admin',
+      label: '쿠폰 승인',
+      sublabel: 'Coupon Approval',
+      description: '본사 관리자 쿠폰 승인/거절',
+      icon: Shield,
+      color: 'from-red-500 via-rose-500 to-pink-500',
+      shadowColor: 'shadow-red-500/30',
+      href: '/admin/coupon-approvals',
+      features: ['쿠폰 승인', '쿠폰 거절', '관리자 전용'],
+    },
   ];
 
   const features = [
