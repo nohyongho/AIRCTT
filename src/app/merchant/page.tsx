@@ -38,6 +38,7 @@ import {
   Loader2,
   CheckCircle,
   X as XIcon,
+    Shield, // Added for admin button
 } from 'lucide-react';
 import GoogleSheetsLog from '@/components/merchant/GoogleSheetsLog'; // Added from diff
 import { Button } from '@/components/ui/button';
@@ -326,6 +327,16 @@ export default function MerchantHomePage() {
 
   return (
     <div className="min-h-screen">
+              {/* 최종관리자 이동 버튼 */}
+                      <div className="bg-gradient-to-r from-red-900/30 to-purple-900/30 border-b border-red-800/30">
+                                <div className="max-w-7xl mx-auto px-4 py-2 flex items-center justify-between">
+                                            <button onClick={() => router.push('/admin')} className="flex items-center gap-2 px-4 py-1.5 bg-gradient-to-r from-red-600 to-purple-600 hover:from-red-500 hover:to-purple-500 rounded-full text-white text-sm font-medium shadow-lg shadow-purple-500/20 transition-all">
+                                                          <Shield className="w-4 h-4" />
+                                                                        최종관리자
+                                                                                    </button>
+                                                                                                <span className="text-xs text-gray-500">Admin Only</span>
+                                                                                                          </div>
+                                                                                                                  </div>
       <header className="sticky top-0 z-40 glass-dark">
         <div className="flex items-center justify-between h-16 px-4">
           <motion.div
