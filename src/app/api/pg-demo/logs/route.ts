@@ -1,15 +1,10 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextResponse } from 'next/server';
 import { createPostgrestClient } from '@/lib/postgrest';
 
-/**
- * GET /api/pg-demo/logs
- * 관리자 이벤트 로그 조회 (순환구조 Step 5)
- */
-export async function GET(req: NextRequest) {
+export async function GET(request: Request) {
   try {
-    const { searchParams } = new URL(req.url);
-    const eventType = searchParams.get('event_type');
-    const limit = parseInt(searchParams.get('limit') || '50');
+    const { searchParams } = new URL(request.url);
+    const type = searchParams.get('type');
 
     const client = createPostgrestClient();
 
@@ -17,10 +12,10 @@ export async function GET(req: NextRequest) {
       .from('event_logs')
       .select('*')
       .order('created_at', { ascending: false })
-      .limit(limit);
+      .limit(50);
 
-    if (eventType) {
-      query = query.eq('event_type', eventType);
+    if (type) {
+      query = query.eq('event_type', type);
     }
 
     const { data: logs, error } = await query;
@@ -31,27 +26,24 @@ export async function GET(req: NextRequest) {
 
     // 24시간 집계
     const now = new Date();
-    const h24ago = new Date(now.getTime() - 24 * 60 * 60 * 1000).toISOString();
+    const h24 = new Date(now.getTime() - 24 * 60 * 60 * 1000).toISOString();
 
     const { data: recent } = await client
       .from('event_logs')
       .select('event_type')
-      .gte('created_at', h24ago);
+      .gte('created_at', h24);
 
-    const typeCounts: Record<string, number> = {};
+    const summary: Record<string, number> = {};
     (recent || []).forEach((r: any) => {
-      typeCounts[r.event_type] = (typeCounts[r.event_type] || 0) + 1;
+      summary[r.event_type] = (summary[r.event_type] || 0) + 1;
     });
 
     return NextResponse.json({
-      success: true,
       logs: logs || [],
-      summary: {
-        total_24h: recent?.length || 0,
-        by_type: typeCounts,
-      },
+      summary_24h: summary,
     });
   } catch (err: any) {
+    console.error('[pg-demo/logs] error:', err);
     return NextResponse.json({ error: err.message }, { status: 500 });
   }
 }

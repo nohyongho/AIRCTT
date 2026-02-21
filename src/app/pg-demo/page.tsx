@@ -4,9 +4,8 @@ import { useState, useCallback } from 'react';
 
 interface UserInfo {
   user_id: string;
-  consumer_id: string;
   name: string;
-  phone: string;
+  email: string;
 }
 
 interface WalletInfo {
@@ -92,10 +91,10 @@ export default function PGDemoPage() {
     try {
       const res = await api('/api/pg-demo/issue', {
         method: 'POST',
-        body: JSON.stringify({ consumer_id: user.consumer_id, coupon_id: couponId }),
+        body: JSON.stringify({ user_id: user.user_id, coupon_id: couponId }),
       });
       setIssuedCoupon(res.coupon_issue);
-      const walletRes = await api(`/api/pg-demo/wallet?consumer_id=${user.consumer_id}`);
+      const walletRes = await api(`/api/pg-demo/wallet?user_id=${user.user_id}`);
       setWallet({ id: walletRes.wallet.id, points: walletRes.wallet.points, coupon_count: walletRes.wallet.coupon_count });
       setActiveCoupons(walletRes.coupons.active);
       setUsedCoupons(walletRes.coupons.used);
@@ -118,7 +117,7 @@ export default function PGDemoPage() {
       const res = await api('/api/pg-demo/pay/create', {
         method: 'POST',
         body: JSON.stringify({
-          consumer_id: user.consumer_id,
+          user_id: user.user_id,
           coupon_issue_id: couponIssueId,
           amount,
           discount_amount: discountAmount,
