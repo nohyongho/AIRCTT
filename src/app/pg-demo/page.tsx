@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 
 interface UserInfo {
   user_id: string;
@@ -10,8 +10,8 @@ interface UserInfo {
 
 interface WalletInfo {
   id: string;
-  points: number;
-  coupon_count: number;
+  total_points: number;
+  total_coupon_count: number;
 }
 
 interface CouponItem {
@@ -26,9 +26,10 @@ interface CouponItem {
 interface IssuedCoupon {
   id: string;
   coupon_id: string;
+  code?: string;
   status: string;
-  issued_at: string;
-  used_at?: string;
+  is_used: boolean;
+  created_at: string;
   coupons?: CouponItem;
 }
 
@@ -52,7 +53,6 @@ export default function PGDemoPage() {
   const [coupons, setCoupons] = useState<CouponItem[]>([]);
   const [issuedCoupon, setIssuedCoupon] = useState<any>(null);
   const [activeCoupons, setActiveCoupons] = useState<IssuedCoupon[]>([]);
-  const [usedCoupons, setUsedCoupons] = useState<IssuedCoupon[]>([]);
   const [paymentResult, setPaymentResult] = useState<any>(null);
   const [logs, setLogs] = useState<LogEntry[]>([]);
   const [logSummary, setLogSummary] = useState<any>(null);
@@ -66,6 +66,35 @@ export default function PGDemoPage() {
     if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
     return data;
   }, []);
+
+  // Handle return from payment complete page
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const paymentComplete = params.get('payment_complete');
+    const status = params.get('status');
+    if (paymentComplete && status) {
+      setPaymentResult({
+        success: status === 'paid',
+        payment_id: paymentComplete,
+        status,
+      });
+      // Clean URL without reload
+      window.history.replaceState({}, '', '/pg-demo');
+      // Auto-login then show step 4
+      (async () => {
+        try {
+          const loginRes = await api('/api/pg-demo/login', { method: 'POST' });
+          setUser(loginRes.user);
+          setWallet(loginRes.wallet);
+          const couponRes = await api('/api/pg-demo/coupons');
+          setCoupons(couponRes.coupons || []);
+          setStep(4);
+        } catch (e: any) {
+          setError((e as Error).message);
+        }
+      })();
+    }
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleLogin = async () => {
     setLoading(true);
@@ -93,11 +122,10 @@ export default function PGDemoPage() {
         method: 'POST',
         body: JSON.stringify({ user_id: user.user_id, coupon_id: couponId }),
       });
-      setIssuedCoupon(res.coupon_issue);
+      setIssuedCoupon(res.issue);
       const walletRes = await api(`/api/pg-demo/wallet?user_id=${user.user_id}`);
-      setWallet({ id: walletRes.wallet.id, points: walletRes.wallet.points, coupon_count: walletRes.wallet.coupon_count });
-      setActiveCoupons(walletRes.coupons.active);
-      setUsedCoupons(walletRes.coupons.used);
+      setWallet({ id: walletRes.wallet.id, total_points: walletRes.wallet.total_points || 0, total_coupon_count: walletRes.wallet.total_coupon_count || 0 });
+      setActiveCoupons(walletRes.active_coupons || []);
       setStep(2);
     } catch (e: any) {
       setError(e.message);
@@ -138,7 +166,7 @@ export default function PGDemoPage() {
     try {
       const res = await api('/api/pg-demo/logs');
       setLogs(res.logs || []);
-      setLogSummary(res.summary);
+      setLogSummary(res.summary_24h || {});
       setStep(5);
     } catch (e: any) {
       setError(e.message);
@@ -165,7 +193,7 @@ export default function PGDemoPage() {
         {user && (
           <div style={{ textAlign: 'right', fontSize: '0.85rem' }}>
             <div>👤 {user.name}</div>
-            <div style={{ opacity: 0.6 }}>💰 {wallet?.points?.toLocaleString() || 0}P | 🎫 {wallet?.coupon_count || 0}장</div>
+            <div style={{ opacity: 0.6 }}>💰 {wallet?.total_points?.toLocaleString() || 0}P | 🎫 {wallet?.total_coupon_count || 0}장</div>
           </div>
         )}
       </header>
@@ -241,11 +269,11 @@ export default function PGDemoPage() {
               <h3 style={{ margin: '0 0 12px', fontSize: '1rem' }}>보유 현황</h3>
               <div style={{ display: 'flex', gap: '16px' }}>
                 <div style={{ flex: 1, textAlign: 'center', padding: '12px', borderRadius: '8px', background: 'rgba(255,255,255,0.05)' }}>
-                  <div style={{ fontSize: '1.5rem', fontWeight: 700, color: '#00d4ff' }}>{wallet?.coupon_count || 0}</div>
+                  <div style={{ fontSize: '1.5rem', fontWeight: 700, color: '#00d4ff' }}>{wallet?.total_coupon_count || 0}</div>
                   <div style={{ fontSize: '0.8rem', opacity: 0.6 }}>보유 쿠폰</div>
                 </div>
                 <div style={{ flex: 1, textAlign: 'center', padding: '12px', borderRadius: '8px', background: 'rgba(255,255,255,0.05)' }}>
-                  <div style={{ fontSize: '1.5rem', fontWeight: 700, color: '#ffd700' }}>{wallet?.points?.toLocaleString() || 0}</div>
+                  <div style={{ fontSize: '1.5rem', fontWeight: 700, color: '#ffd700' }}>{wallet?.total_points?.toLocaleString() || 0}</div>
                   <div style={{ fontSize: '0.8rem', opacity: 0.6 }}>포인트</div>
                 </div>
               </div>
@@ -258,7 +286,7 @@ export default function PGDemoPage() {
                 <div key={c.id} style={{ padding: '14px', borderRadius: '10px', background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)', marginBottom: '8px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                   <div>
                     <div style={{ fontWeight: 600 }}>{(c as any).coupons?.title || '쿠폰'}</div>
-                    <div style={{ fontSize: '0.8rem', opacity: 0.5 }}>발급: {new Date(c.issued_at).toLocaleDateString()}</div>
+                    <div style={{ fontSize: '0.8rem', opacity: 0.5 }}>발급: {new Date(c.created_at).toLocaleDateString()}</div>
                   </div>
                   <button onClick={() => handleStartPayment(c.id)} disabled={loading} style={{ padding: '8px 16px', borderRadius: '8px', border: 'none', background: 'linear-gradient(135deg, #ff6b35, #ff3366)', color: '#fff', fontWeight: 700, cursor: 'pointer', fontSize: '0.85rem' }}>
                     💳 결제하기
@@ -273,9 +301,9 @@ export default function PGDemoPage() {
           <section>
             <h2 style={{ fontSize: '1.2rem', marginBottom: '16px' }}>✅ Step 4: 결제 완료 & 쿠폰 사용</h2>
             {paymentResult && (
-              <div style={{ padding: '20px', borderRadius: '12px', background: paymentResult.status === 'paid' ? 'rgba(0,255,100,0.1)' : 'rgba(255,50,50,0.1)', border: `1px solid ${paymentResult.status === 'paid' ? 'rgba(0,255,100,0.3)' : 'rgba(255,50,50,0.3)'}`, textAlign: 'center', marginBottom: '16px' }}>
-                <div style={{ fontSize: '3rem', marginBottom: '8px' }}>{paymentResult.status === 'paid' ? '✅' : '❌'}</div>
-                <h3 style={{ margin: '0 0 4px' }}>{paymentResult.status === 'paid' ? '결제 성공!' : '결제 실패/취소'}</h3>
+              <div style={{ padding: '20px', borderRadius: '12px', background: paymentResult.success ? 'rgba(0,255,100,0.1)' : 'rgba(255,50,50,0.1)', border: `1px solid ${paymentResult.success ? 'rgba(0,255,100,0.3)' : 'rgba(255,50,50,0.3)'}`, textAlign: 'center', marginBottom: '16px' }}>
+                <div style={{ fontSize: '3rem', marginBottom: '8px' }}>{paymentResult.success ? '✅' : '❌'}</div>
+                <h3 style={{ margin: '0 0 4px' }}>{paymentResult.success ? '결제 성공!' : '결제 실패/취소'}</h3>
                 <p style={{ margin: 0, opacity: 0.7, fontSize: '0.9rem' }}>Payment ID: {paymentResult.payment_id?.slice(0, 8)}...</p>
               </div>
             )}
@@ -292,13 +320,13 @@ export default function PGDemoPage() {
               <div style={{ padding: '16px', borderRadius: '12px', background: 'rgba(255,255,255,0.08)', marginBottom: '16px' }}>
                 <h3 style={{ margin: '0 0 8px', fontSize: '0.95rem' }}>최근 24시간 집계</h3>
                 <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-                  {Object.entries(logSummary.by_type || {}).map(([type, count]) => (
+                  {Object.entries(logSummary || {}).map(([type, count]) => (
                     <span key={type} style={{ padding: '4px 10px', borderRadius: '12px', background: 'rgba(0,212,255,0.15)', fontSize: '0.8rem', color: '#00d4ff' }}>
                       {type}: {count as number}
                     </span>
                   ))}
                 </div>
-                <div style={{ marginTop: '8px', fontSize: '0.85rem', opacity: 0.6 }}>총 {logSummary.total_24h}건</div>
+                <div style={{ marginTop: '8px', fontSize: '0.85rem', opacity: 0.6 }}>총 {Object.values(logSummary || {}).reduce((a: number, b: any) => a + (b as number), 0)}건</div>
               </div>
             )}
             <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>

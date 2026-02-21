@@ -47,8 +47,8 @@ export async function POST() {
       },
       wallet: {
         id: wallet?.id,
-        points: wallet?.total_points || 0,
-        coupon_count: wallet?.total_coupon_count || 0,
+        total_points: wallet?.total_points || 0,
+        total_coupon_count: wallet?.total_coupon_count || 0,
       },
     });
   } catch (err: any) {
