@@ -25,10 +25,10 @@
   - [x] 지갑에서 쿠폰 클릭 → 사업자 사이트 딥링크
   - [x] 쿠폰 코드 자동 전달
   - [x] 사용 완료 상태 업데이트
-- [ ] **Step 5**: 전체 네비게이션 연결 (선순환 흐름 완성)
-  - [ ] 각 페이지 간 이동 버튼/링크
-  - [ ] 사업자/고객/관리자 흐름별 메뉴
-  - [ ] 순환 구조 완성 테스트
+- [x] **Step 5**: 전체 네비게이션 연결 (선순환 흐름 완성)
+  - [x] 각 페이지 간 이동 버튼/링크
+  - [x] 사업자/고객/관리자 흐름별 메뉴
+  - [x] 순환 구조 완성 테스트
 
 ---
 
@@ -52,3 +52,4 @@
 - 2026-02-20: Step 3-B CouponGame3D frontend API 연결
 - 2026-02-20: Step 4-A coupon redeem API
 - 2026-02-20: Step 4-B wallet redeem button + API 연결
+- 2026-02-20: Step 5 navigation (admin coupon approval button + game wallet link)
