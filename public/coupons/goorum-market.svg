@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="400" height="200" viewBox="0 0 400 200">
+  <defs><linearGradient id="bg2" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" style="stop-color:#667eea"/><stop offset="100%" style="stop-color:#764ba2"/></linearGradient></defs>
+  <rect width="400" height="200" rx="16" fill="url(#bg2)"/>
+  <text x="200" y="60" text-anchor="middle" fill="white" font-size="48">☁️</text>
+  <text x="200" y="110" text-anchor="middle" fill="white" font-size="22" font-weight="bold" font-family="sans-serif">구름장터 할인쿠폰</text>
+  <text x="200" y="145" text-anchor="middle" fill="rgba(255,255,255,0.9)" font-size="36" font-weight="bold" font-family="sans-serif">5,000P</text>
+  <text x="200" y="180" text-anchor="middle" fill="rgba(255,255,255,0.6)" font-size="12" font-family="sans-serif">최소 주문 15,000원 | 전 매장 사용 가능</text>
+</svg>
