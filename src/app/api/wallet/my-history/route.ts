@@ -18,7 +18,7 @@ export async function GET(request: Request) {
         const { data: wallet } = await client
             .from('wallets')
             .select('id')
-            .eq('consumer_id', consumerKey)
+            .eq('user_id', consumerKey)
             .single();
 
         if (!wallet) {

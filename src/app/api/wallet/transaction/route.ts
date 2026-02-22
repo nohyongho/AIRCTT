@@ -5,9 +5,10 @@ import { createPostgrestClient } from '@/lib/postgrest';
 export async function POST(request: Request) {
     try {
         const body = await request.json();
-        const { consumer_id, type, amount_points } = body;
+        const { user_id, consumer_id: legacy_consumer_id, type, amount_points } = body;
+        const resolvedUserId = user_id || legacy_consumer_id;
 
-        if (!consumer_id || !type || amount_points === undefined) {
+        if (!resolvedUserId || !type || amount_points === undefined) {
             return NextResponse.json({ error: 'Missing parameters' }, { status: 400 });
         }
 
@@ -17,7 +18,7 @@ export async function POST(request: Request) {
         const { data: wallet, error: walletError } = await client
             .from('wallets')
             .select('id, total_points')
-            .eq('consumer_id', consumer_id)
+            .eq('user_id', resolvedUserId)
             .single();
 
         let walletId = wallet?.id;
@@ -27,7 +28,7 @@ export async function POST(request: Request) {
         if (!wallet) {
             const { data: newWallet, error: createError } = await client
                 .from('wallets')
-                .insert({ consumer_id, total_points: 0 })
+                .insert({ user_id: resolvedUserId, total_points: 0, total_coupon_count: 0 })
                 .select('id, total_points')
                 .single();
             if (createError) throw createError;
