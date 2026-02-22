@@ -61,19 +61,19 @@ export async function POST(request: Request) {
 
         // 3) 지갑 쿠폰 카운트 감소
         const { data: wallet } = await client
-          .from('pg_demo_wallets')
+          .from('wallets')
           .select('id, total_coupon_count')
           .eq('user_id', payment.user_id)
           .single();
 
         if (wallet) {
           await client
-            .from('pg_demo_wallets')
+            .from('wallets')
             .update({ total_coupon_count: Math.max(0, (wallet.total_coupon_count || 0) - 1), updated_at: new Date().toISOString() })
             .eq('id', wallet.id);
 
           // 4) 거래 기록
-          await client.from('pg_demo_transactions').insert({
+          await client.from('wallet_transactions').insert({
             wallet_id: wallet.id,
             user_id: payment.user_id,
             tx_type: 'coupon_use',

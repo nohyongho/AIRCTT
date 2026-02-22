@@ -57,23 +57,23 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: iErr.message }, { status: 500 });
     }
 
-    // 4. pg_demo_wallets 쿠폰 카운트 증가
+    // 4. wallets 쿠폰 카운트 증가
     let { data: wallet } = await client
-      .from('pg_demo_wallets')
+      .from('wallets')
       .select('id, total_coupon_count')
       .eq('user_id', user_id)
       .single();
 
     if (!wallet) {
       const { data: newWallet } = await client
-        .from('pg_demo_wallets')
+        .from('wallets')
         .insert({ user_id, total_points: 0, total_coupon_count: 1 })
         .select('id, total_coupon_count')
         .single();
       wallet = newWallet;
     } else {
       await client
-        .from('pg_demo_wallets')
+        .from('wallets')
         .update({
           total_coupon_count: (wallet.total_coupon_count || 0) + 1,
           updated_at: new Date().toISOString(),
@@ -81,9 +81,9 @@ export async function POST(request: Request) {
         .eq('id', wallet.id);
     }
 
-    // 5. pg_demo_transactions 기록
+    // 5. wallet_transactions 기록
     if (wallet) {
-      await client.from('pg_demo_transactions').insert({
+      await client.from('wallet_transactions').insert({
         wallet_id: wallet.id,
         user_id,
         tx_type: 'coupon_issue',

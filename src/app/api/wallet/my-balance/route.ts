@@ -18,7 +18,7 @@ export async function GET(request: Request) {
         const { data, error } = await client
             .from('wallets')
             .select('total_points')
-            .eq('consumer_id', consumerKey)
+            .eq('user_id', consumerKey)
             .single();
 
         if (error && error.code !== 'PGRST116') {

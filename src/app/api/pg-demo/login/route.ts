@@ -18,16 +18,16 @@ export async function POST() {
       return NextResponse.json({ error: '데모 유저가 없습니다. seed를 먼저 실행하세요.' }, { status: 404 });
     }
 
-    // 2. pg_demo_wallets 확인/생성
+    // 2. wallets 확인/생성
     let { data: wallet } = await client
-      .from('pg_demo_wallets')
+      .from('wallets')
       .select('id, total_points, total_coupon_count')
       .eq('user_id', DEMO_USER_ID)
       .single();
 
     if (!wallet) {
       const { data: newWallet } = await client
-        .from('pg_demo_wallets')
+        .from('wallets')
         .insert({
           user_id: DEMO_USER_ID,
           total_points: 0,

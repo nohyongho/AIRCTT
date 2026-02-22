@@ -14,7 +14,7 @@ export async function GET(request: Request) {
 
     // 1. 지갑 조회
     const { data: wallet } = await client
-      .from('pg_demo_wallets')
+      .from('wallets')
       .select('id, total_points, total_coupon_count')
       .eq('user_id', userId)
       .single();
@@ -29,7 +29,7 @@ export async function GET(request: Request) {
 
     // 3. 최근 거래 내역
     const { data: transactions } = await client
-      .from('pg_demo_transactions')
+      .from('wallet_transactions')
       .select('*')
       .eq('user_id', userId)
       .order('created_at', { ascending: false })
